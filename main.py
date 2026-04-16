@@ -42,7 +42,7 @@ def test_supabase_connection():
     try:
         # IMPORTANTE: Reemplaza 'tu_tabla_aqui' con el nombre de una tabla real en tu base de datos
         # Limitamos el resultado a 5 registros para la prueba
-        response = supabase.table('producto').select('nombre, precio').limit(5).execute()
+        response = supabase.table('producto').select('nombre, precio').execute()
         
         return {
             "status": "success",
