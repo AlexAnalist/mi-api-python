@@ -1,5 +1,6 @@
 import os
-from fastapi import FastAPI, HTTPException
+import requests
+from fastapi import FastAPI, HTTPException, Request
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
@@ -108,3 +109,106 @@ def buscar_libros_por_editorial(editorial: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error consultando Supabase: {str(e)}")
+
+# ==========================================
+# RUTAS DE INTEGRACIÓN CON EVOLUTION API
+# ==========================================
+
+# Variables para Evolution API
+EVO_API_URL = "https://evolution-api-production-5470.up.railway.app"
+EVO_API_KEY = "ea3cef6168ea65ff502ba6a8b657e329588c3b9c76f99de5640d8d0885cf4aad"
+EVO_INSTANCE_NAME = "YoshiBot"
+
+@app.post("/webhook")
+async def webhook_evolution(request: Request):
+    """
+    Webhook para recibir eventos de Evolution API y responder automáticamente
+    consultando el catálogo en Supabase.
+    """
+    # 1. Leer el JSON entrante
+    payload = await request.json()
+    
+    # 2. Filtrar por el evento de mensajes que necesitamos (messages.upsert)
+    if payload.get("event") != "messages.upsert":
+        return {"status": "ignored", "reason": "Evento no es messages.upsert"}
+    
+    data = payload.get("data", {})
+    key = data.get("key", {})
+    
+    # 3. Evitar que el bot se responda a sí mismo
+    if key.get("fromMe"):
+        return {"status": "ignored", "reason": "Mensaje enviado por el bot (fromMe=true)"}
+        
+    remote_jid = key.get("remoteJid")
+    if not remote_jid:
+        return {"status": "ignored", "reason": "No se encontró remoteJid"}
+
+    # 4. Extraer el texto del mensaje (Evolution API lo manda distinto dependiendo del tipo)
+    message_content = data.get("message", {})
+    texto_busqueda = ""
+    
+    # WhatsApp puede mandar el texto de distintas formas si fue respuesta normal o "extendida"
+    if "conversation" in message_content:
+        texto_busqueda = message_content["conversation"]
+    elif "extendedTextMessage" in message_content and "text" in message_content["extendedTextMessage"]:
+        texto_busqueda = message_content["extendedTextMessage"]["text"]
+    else:
+        # Si envían una imagen o un audio por ejemplo y no es texto, lo ignoramos
+        return {"status": "ignored", "reason": "El mensaje no contiene texto procesable"}
+
+    texto_busqueda = texto_busqueda.strip()
+    if not texto_busqueda:
+        return {"status": "ignored", "reason": "Texto vacío"}
+
+    # 5. Realizar la búsqueda respectiva en Supabase
+    db = get_db()
+    try:
+        # Buscamos coincidencias con ilike usando el texto recibido como comodín
+        response = db.table('producto').select('nombre, precio').ilike('nombre', f'%{texto_busqueda}%').execute()
+        resultados = response.data
+    except Exception as e:
+        print("Error en base de datos Supabase:", e)
+        resultados = []
+
+    # 6. Preparar el mensaje que vamos a responder (Identidad: Yoshi 🦖)
+    if resultados:
+        # Agarramos el primer resultado si hubiera varios
+        libro = resultados[0]
+        nombre_libro = libro.get('nombre', 'Desconocido')
+        precio_libro = libro.get('precio', 0)
+        
+        mensaje_respuesta = (
+            f"¡Hola! Soy Yoshi 🦖\n\n"
+            f"¡Sí tenemos el libro que buscas!\n"
+            f"📖 {nombre_libro}\n"
+            f"💰 Precio: *${precio_libro}*\n\n"
+            f"¿Te gustaría que te ayude con algo más?"
+        )
+    else:
+        # Si Supabase devolvió un arreglo vacío
+        mensaje_respuesta = (
+            f"¡Hola! Soy Yoshi 🦖\n\n"
+            f"He buscado *{texto_busqueda}* en nuestro catálogo, pero lamentablemente no lo tengo disponible por el momento. 😔\n\n"
+            f"¿Buscas algún otro título?"
+        )
+
+    # 7. Enviar la respuesta a Evolution API de vuelta al chat
+    send_url = f"{EVO_API_URL}/message/sendText/{EVO_INSTANCE_NAME}"
+    headers = {
+        "apikey": EVO_API_KEY,
+        "Content-Type": "application/json"
+    }
+    body = {
+        "number": remote_jid,
+        "text": mensaje_respuesta
+    }
+    
+    try:
+        # Usamos requests para mandar el POST de forma síncrona
+        respuesta_evo = requests.post(send_url, headers=headers, json=body)
+        respuesta_evo.raise_for_status() # Lanza excepción si el estatus HTTP es error
+    except Exception as e:
+        print("Error al enviar mensaje por Evolution API:", e)
+        return {"status": "error", "detail": str(e)}
+
+    return {"status": "ok", "message": "Respuesta al usuario enviada correctamente"}
