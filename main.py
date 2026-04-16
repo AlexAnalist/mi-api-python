@@ -22,6 +22,7 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 else:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+print("YOSHI")
 
 @app.get("/")
 def read_root():
@@ -41,7 +42,7 @@ def test_supabase_connection():
     try:
         # IMPORTANTE: Reemplaza 'tu_tabla_aqui' con el nombre de una tabla real en tu base de datos
         # Limitamos el resultado a 5 registros para la prueba
-        response = supabase.table('tu_tabla_aqui').select('*').limit(5).execute()
+        response = supabase.table('producto').select('nombre, precio').limit(5).execute()
         
         return {
             "status": "success",
