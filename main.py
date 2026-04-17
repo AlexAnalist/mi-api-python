@@ -123,19 +123,16 @@ EVO_INSTANCE_NAME = "YoshiBot"
 async def webhook_evolution(request: Request):
     """
     Webhook para recibir eventos de Evolution API y responder automáticamente
-    consultando el catálogo en Supabase, con la personalidad "Russell".
+    consultando el catálogo en Supabase, con la personalidad de "Russell".
     """
-    # 1. Leer el JSON entrante
-    payload = await request.json()
+    payload = await request.json(),
     
-    # 2. Filtrar por el evento de mensajes que necesitamos (messages.upsert)
     if payload.get("event") != "messages.upsert":
         return {"status": "ignored", "reason": "Evento no es messages.upsert"}
     
     data = payload.get("data", {})
     key = data.get("key", {})
     
-    # 3. Evitar que el bot se responda a sí mismo
     if key.get("fromMe"):
         return {"status": "ignored", "reason": "Mensaje enviado por el bot (fromMe=true)"}
         
@@ -143,11 +140,11 @@ async def webhook_evolution(request: Request):
     if not remote_jid:
         return {"status": "ignored", "reason": "No se encontró remoteJid"}
 
-    # FILTRO: Evitar que el bot responda a mensajes de grupos
+    # FILTRO: Evitar responder a grupos
     if "@g.us" in remote_jid:
         return {"status": "ignored", "reason": "Mensaje proviene de un grupo (@g.us)"}
 
-    # 4. Extraer el texto del mensaje
+    # Extraer el texto del mensaje
     message_content = data.get("message", {})
     texto_bruto = ""
     
@@ -160,67 +157,125 @@ async def webhook_evolution(request: Request):
 
     texto_bruto = texto_bruto.strip()
     if not texto_bruto:
-        return {"status": "ignored", "reason": "Texto vacío"}
+        return {"status": "ignored"}
 
-    # WAKE WORD: Activación solo si la petición inicia con "yoshi"
+    # OBLIGATORIO: Debe empezar con "Yoshi"
     if not texto_bruto.lower().startswith("yoshi"):
         return {"status": "ignored", "reason": "Mensaje no usa la wake word 'yoshi'"}
 
-    # 5. Limpieza: Remover "yoshi" (primeros 5 caracteres) y obtener el término real de búsqueda
+    # Limpieza "Yoshi" (primeros 5)
     texto_busqueda = texto_bruto[5:].strip()
     texto_busqueda_baja = texto_busqueda.lower()
 
-    # Partes estáticas del mensaje Russell
-    saludo_russell = "¡Buenas! Soy Yoshi, su Guía Explorador de la Librería Mikrokosmos. ¿Le gustaría que le ayude en algo hoy? 🦖🎈\n\n"
-    explicacion = "Puedo buscar precios y disponibilidad de cualquier libro en nuestra base de datos.\n\n"
+    # Russell 
+    saludo_russell = "¡Buenas! Soy Yoshi, su Guía Explorador. ¡Listo para ayudarle a rastrear tesoros literarios! 🦖🎈\n\n"
     cierre = "\n\n¡Un explorador siempre es servicial! 🐾"
 
-    # Comando de ayuda o si solo se escribe "Yoshi" sin término de búsqueda
     if not texto_busqueda or texto_busqueda_baja == "ayuda":
         mensaje_respuesta = (
             f"{saludo_russell}"
-            f"Escriba: Yoshi [nombre del libro] para saber el precio.\n"
-            f"Escriba: Yoshi ayuda para ver este mensaje de nuevo."
+            f"Puede pedirme cosas así:\n"
+            f"📍 Por Nombre: Yoshi [nombre del libro]\n"
+            f"📍 Por Categoría: Yoshi genero [nombre del genero]\n"
+            f"📍 Por Editorial: Yoshi editorial [nombre de la editorial]"
             f"{cierre}"
         )
     else:
-        # 6. Realizar la búsqueda respectiva en Supabase
         db = get_db()
-        try:
-            # Buscamos coincidencias con ilike usando el texto recibido como comodín
-            response = db.table('producto').select('nombre, precio').ilike('nombre', f'%{texto_busqueda}%').execute()
-            resultados = response.data
-        except Exception as e:
-            print("Error en base de datos Supabase:", e)
-            resultados = []
-
-        # 7. Preparar el mensaje que vamos a responder
-        if resultados:
-            # Agarramos el primer resultado
-            libro = resultados[0]
-            nombre_libro = libro.get('nombre', 'Desconocido')
-            precio_libro = libro.get('precio', 0)
-            
-            # Resultado Exitosa - Russell
-            mensaje_respuesta = (
-                f"{saludo_russell}"
-                f"{explicacion}"
-                f"¡Rastré el rastro de su libro!\n"
-                f"📖 Libro: {nombre_libro}\n"
-                f"💰 Precio: *${precio_libro}*"
-                f"{cierre}"
-            )
+        resultados = []
+        tipo_busqueda = "nombre"
+        
+        # Determinar el tipo de prefijo de exploración
+        if texto_busqueda_baja.startswith("genero "):
+            termino = texto_busqueda[7:].strip()
+            tipo_busqueda = "genero"
+            if termino:
+                try:
+                    response = db.table('producto').select('nombre, precio, libro_detalles!inner(autor, editorial, genero, sinopsis)').ilike('libro_detalles.genero', f'%{termino}%').execute()
+                    resultados = response.data
+                except Exception:
+                    pass
+        elif texto_busqueda_baja.startswith("editorial "):
+            termino = texto_busqueda[10:].strip()
+            tipo_busqueda = "editorial"
+            if termino:
+                try:
+                    response = db.table('producto').select('nombre, precio, libro_detalles!inner(autor, editorial, genero, sinopsis)').ilike('libro_detalles.editorial', f'%{termino}%').execute()
+                    resultados = response.data
+                except Exception:
+                    pass
         else:
-            # Producto no encontrado - Alternativa estilo explorador
-            mensaje_respuesta = (
-                f"{saludo_russell}"
-                f"{explicacion}"
-                f"⛺ ¡Pucha! He explorado el campamento, pero no pude encontrar el paradero de *{texto_busqueda}* por ahora. 😔\n"
-                f"¿Hay algún otro título que pueda rastrear para usted?"
-                f"{cierre}"
-            )
+            termino = texto_busqueda
+            tipo_busqueda = "nombre"
+            if termino:
+                try:
+                    # Búsqueda inicial "Exacta" / frase completa
+                    response = db.table('producto').select('nombre, precio').ilike('nombre', f'%{termino}%').execute()
+                    resultados = response.data
+                except Exception:
+                    pass
 
-    # 8. Enviar la respuesta a Evolution API de vuelta al chat
+        # Evaluar resultados
+        if resultados:
+            if tipo_busqueda == "nombre":
+                libro = resultados[0]
+                mensaje_respuesta = (
+                    f"{saludo_russell}"
+                    f"¡Rastré el rastro de su libro!\n"
+                    f"📖 Libro: {libro.get('nombre')}\n"
+                    f"💰 Precio: *${libro.get('precio')}*"
+                    f"{cierre}"
+                )
+            else:
+                # Género o Editorial: mostrar un pequeño catálogo (hasta 5)
+                libros_texto = ""
+                for lb in resultados[:5]:
+                    libros_texto += f"📖 {lb.get('nombre', 'Desconocido')} - *${lb.get('precio', 0)}*\n"
+                
+                mensaje_respuesta = (
+                    f"{saludo_russell}"
+                    f"¡Pude encontrar estos tesoros en esa sección!\n\n"
+                    f"{libros_texto.strip()}"
+                    f"{cierre}"
+                )
+        else:
+            # Fallback en caso de que no haya encontrado resultados exactos
+            fallback_encontrado = False
+            
+            if tipo_busqueda == "nombre" and termino:
+                # Separamos el string en palabras (para palabras razonablemente largas)
+                palabras = [p for p in termino.split() if len(p) > 2]
+                if palabras:
+                    # Creamos la condición OR (.ilike('%word1%') or .ilike('%word2%'))
+                    or_condiciones = ",".join([f"nombre.ilike.%{p}%" for p in palabras])
+                    try:
+                        resp_fallback = db.table('producto').select('nombre, precio').or_(or_condiciones).limit(3).execute()
+                        fallback_resultados = resp_fallback.data
+                        
+                        if fallback_resultados:
+                            fallback_encontrado = True
+                            fallback_texto = ""
+                            for fb in fallback_resultados:
+                                fallback_texto += f"📖 {fb.get('nombre', 'Desconocido')} - *${fb.get('precio', 0)}*\n"
+
+                            mensaje_respuesta = (
+                                f"{saludo_russell}"
+                                f"¡Pucha! 🏕️ No encontré exactamente ese rastro, pero encontré estos datos semejantes que podrían interesarle:\n\n"
+                                f"{fallback_texto.strip()}"
+                                f"{cierre}"
+                            )
+                    except Exception as e:
+                        print("Error en fallback de Supabase:", e)
+            
+            if not fallback_encontrado:
+                mensaje_respuesta = (
+                    f"{saludo_russell}"
+                    f"¡Pucha! 🏕️ He explorado el campamento, pero no pude encontrar el paradero de *{termino}* por ahora. 😔\n"
+                    f"¿Hay algún otro título que pueda rastrear para usted?"
+                    f"{cierre}"
+                )
+
+    # 8. Enviar la respuesta
     send_url = f"{EVO_API_URL}/message/sendText/{EVO_INSTANCE_NAME}"
     headers = {
         "apikey": EVO_API_KEY,
@@ -232,9 +287,7 @@ async def webhook_evolution(request: Request):
     }
     
     try:
-        # Usamos requests para mandar el POST de forma síncrona
-        respuesta_evo = requests.post(send_url, headers=headers, json=body)
-        respuesta_evo.raise_for_status() # Lanza excepción si el estatus HTTP es error
+        requests.post(send_url, headers=headers, json=body).raise_for_status()
     except Exception as e:
         print("Error al enviar mensaje por Evolution API:", e)
         return {"status": "error", "detail": str(e)}
