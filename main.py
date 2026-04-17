@@ -143,24 +143,38 @@ async def webhook_evolution(request: Request):
     if not remote_jid:
         return {"status": "ignored", "reason": "No se encontró remoteJid"}
 
+    # FILTRO: Evitar que el bot responda a mensajes de grupos
+    if "@g.us" in remote_jid:
+        return {"status": "ignored", "reason": "Mensaje proviene de un grupo (@g.us)"}
+
     # 4. Extraer el texto del mensaje (Evolution API lo manda distinto dependiendo del tipo)
     message_content = data.get("message", {})
-    texto_busqueda = ""
+    texto_bruto = ""
     
     # WhatsApp puede mandar el texto de distintas formas si fue respuesta normal o "extendida"
     if "conversation" in message_content:
-        texto_busqueda = message_content["conversation"]
+        texto_bruto = message_content["conversation"]
     elif "extendedTextMessage" in message_content and "text" in message_content["extendedTextMessage"]:
-        texto_busqueda = message_content["extendedTextMessage"]["text"]
+        texto_bruto = message_content["extendedTextMessage"]["text"]
     else:
         # Si envían una imagen o un audio por ejemplo y no es texto, lo ignoramos
         return {"status": "ignored", "reason": "El mensaje no contiene texto procesable"}
 
-    texto_busqueda = texto_busqueda.strip()
-    if not texto_busqueda:
+    texto_bruto = texto_bruto.strip()
+    if not texto_bruto:
         return {"status": "ignored", "reason": "Texto vacío"}
 
-    # 5. Realizar la búsqueda respectiva en Supabase
+    # WAKE WORD: Activación solo si la petición inicia con "yoshi"
+    if not texto_bruto.lower().startswith("yoshi"):
+        return {"status": "ignored", "reason": "Mensaje no usa la wake word 'yoshi'"}
+
+    # 5. Limpieza: Remover "yoshi" (primeros 5 caracteres) y obtener el término real de búsqueda
+    texto_busqueda = texto_bruto[5:].strip()
+
+    if not texto_busqueda:
+        return {"status": "ignored", "reason": "Mensaje no especifica qué buscar después de 'Yoshi'"}
+
+    # 6. Realizar la búsqueda respectiva en Supabase
     db = get_db()
     try:
         # Buscamos coincidencias con ilike usando el texto recibido como comodín
@@ -170,7 +184,7 @@ async def webhook_evolution(request: Request):
         print("Error en base de datos Supabase:", e)
         resultados = []
 
-    # 6. Preparar el mensaje que vamos a responder (Identidad: Yoshi 🦖)
+    # 7. Preparar el mensaje que vamos a responder (Identidad: Yoshi 🦖)
     if resultados:
         # Agarramos el primer resultado si hubiera varios
         libro = resultados[0]
@@ -192,7 +206,7 @@ async def webhook_evolution(request: Request):
             f"¿Buscas algún otro título?"
         )
 
-    # 7. Enviar la respuesta a Evolution API de vuelta al chat
+    # 8. Enviar la respuesta a Evolution API de vuelta al chat
     send_url = f"{EVO_API_URL}/message/sendText/{EVO_INSTANCE_NAME}"
     headers = {
         "apikey": EVO_API_KEY,
