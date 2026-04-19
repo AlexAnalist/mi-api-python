@@ -144,7 +144,7 @@ async def webhook_evolution(request: Request):
     '''
     if key.get("fromMe"):
         return {"status": "ignored", "reason": "Mensaje enviado por el bot (fromMe=true)"}
-        '''
+    '''
     remote_jid = key.get("remoteJid")
     if not remote_jid:
         return {"status": "ignored", "reason": "No se encontró remoteJid"}
