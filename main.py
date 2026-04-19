@@ -167,7 +167,12 @@ async def webhook_evolution(request: Request):
         return {"status": "ignored"}
 
     # 1. Limpieza de Entrada
-    limpieza = texto_bruto.lower()
+    limpieza = texto_bruto.lower().strip()
+    
+    # Eliminar acentos
+    for a, b in zip("áéíóú", "aeiou"):
+        limpieza = limpieza.replace(a, b)
+        
     # Eliminar wake words
     for word in ["yoshi", "cometa"]:
         limpieza = limpieza.replace(word, "")
@@ -178,14 +183,14 @@ async def webhook_evolution(request: Request):
     
     query_usuario = limpieza.strip()
     
-    # Identidad de Cometa
-    saludo_cometa = "¡Saludos, explorador del cosmos! ☄️ Soy Cometa, tu guía interestelar en la Librería Mikrokosmos. ¡Listo para rastrear tesoros literarios en el infinito! 🚀🌌\n\n"
-    cierre = "\n\n✨ ¡Que las estrellas guíen tu lectura! 🌠"
+    # Identidad de Cometa la Gata Galáctica
+    saludo_cometa = "¡Miau! 🐾 Soy Cometa, la Gata Galáctica 🐱🚀. Tu guía en la Librería Mikrokosmos.\n\n"
+    cierre = "\n\n✨ ¡Mis bigotes espaciales siempre a tu servicio! 🌌🚀"
 
     if not query_usuario or query_usuario == "ayuda":
         mensaje_respuesta = (
             f"{saludo_cometa}"
-            f"Puedes pedirme que explore así:\n"
+            f"Mis bigotes detectan que necesitas ayuda. Puedes pedirme que explore así:\n"
             f"📍 Por Nombre: Cometa [nombre del libro]\n"
             f"📍 Por Categoría: Cometa genero [nombre del género]\n"
             f"📍 Por Editorial: Cometa editorial [nombre de la editorial]\n"
@@ -221,6 +226,9 @@ async def webhook_evolution(request: Request):
                 try:
                     response = db.table('producto').select('nombre, precio, estrellas, libro_detalles(autor, editorial, genero, sinopsis)').eq('estrellas', termino).execute()
                     resultados = response.data
+                    if not resultados and termino == "5":
+                        response = db.table('producto').select('nombre, precio, estrellas, libro_detalles(autor, editorial, genero, sinopsis)').gte('estrellas', 4).order('estrellas', desc=True).limit(5).execute()
+                        resultados = response.data
                 except Exception: pass
         else:
             termino = query_usuario
@@ -245,7 +253,7 @@ async def webhook_evolution(request: Request):
 
                 mensaje_respuesta = (
                     f"{saludo_cometa}"
-                    f"¡He orbitado y encontrado este tesoro!\n\n"
+                    f"¡Miau! Mis bigotes espaciales detectan algo... ¡He orbitado y encontrado este tesoro!\n\n"
                     f"📖 *{item.get('nombre')}*\n"
                     f"✍️ Autor: {detalles.get('autor', 'N/A')}\n"
                     f"🏢 Editorial: {detalles.get('editorial', 'N/A')}\n"
@@ -260,21 +268,44 @@ async def webhook_evolution(request: Request):
                 for lb in resultados[:5]:
                     libros_texto += f"📖 *{lb.get('nombre')}* - ${lb.get('precio', 0)} {get_stars_emoji(lb.get('estrellas', 0))}\n"
                 
+                context_msg = "¡Miau! Mis bigotes espaciales detectaron estos tesoros."
+                if tipo_busqueda == "genero":
+                    context_msg = f"Aterrizando en el sector de {termino.capitalize()}... 🐾🚀"
+                elif tipo_busqueda == "editorial":
+                    context_msg = f"Explorando la nebulosa de {termino.capitalize()}... 🐱🌌"
+
                 mensaje_respuesta = (
                     f"{saludo_cometa}"
-                    f"¡He detectado estos tesoros en esa coordenada estelar!\n\n"
+                    f"{context_msg}\n\n"
                     f"{libros_texto.strip()}"
                     f"{cierre}"
                 )
         else:
-            # Fallback (Sugerencia de Fantasía)
-            mensaje_respuesta = (
-                f"{saludo_cometa}"
-                f"¡Pucha! 🚀 He explorado el sector, pero no detecté rastro de *{termino}*. 😔\n\n"
-                f"Sin embargo, ¡la sección de **Fantasía** tiene tesoros increíbles esperando ser descubiertos! 🌌\n"
-                f"¿Hay algún otro título que pueda rastrear para ti?"
-                f"{cierre}"
-            )
+            # Fallback (Opciones Parecidas)
+            fallback_resultados = []
+            try:
+                 resp_fallback = db.table('producto').select('nombre, precio, estrellas, libro_detalles(autor, editorial, genero, sinopsis)').limit(3).execute()
+                 fallback_resultados = resp_fallback.data
+            except Exception: pass
+
+            if fallback_resultados:
+                libros_texto = ""
+                for lb in fallback_resultados:
+                    libros_texto += f"📖 *{lb.get('nombre')}* - ${lb.get('precio', 0)} {get_stars_emoji(lb.get('estrellas', 0))}\n"
+                
+                mensaje_respuesta = (
+                    f"{saludo_cometa}"
+                    f"¡Pucha! 😿 No encontré ese título exacto en mis archivos gatunos, pero quizás te gusten estos otros tesoros de la galaxia:\n\n"
+                    f"{libros_texto.strip()}"
+                    f"{cierre}"
+                )
+            else:
+                mensaje_respuesta = (
+                    f"{saludo_cometa}"
+                    f"¡Pucha! 🚀 He explorado el sector, pero no detecté rastro de *{termino}*. 😔\n\n"
+                    f"¡Sigo lista para orbitar hacia otras coordenadas!"
+                    f"{cierre}"
+                )
 
 
     # 8. Enviar la respuesta
