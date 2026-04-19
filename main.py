@@ -134,17 +134,15 @@ async def webhook_evolution(request: Request):
     Webhook para recibir eventos de Evolution API y responder automáticamente
     consultando el catálogo en Supabase, con la personalidad de "Russell".
     """
-    payload = await request.json(),
+    payload = await request.json()
     
     if payload.get("event") != "messages.upsert":
         return {"status": "ignored", "reason": "Evento no es messages.upsert"}
     
     data = payload.get("data", {})
     key = data.get("key", {})
-    '''
-    if key.get("fromMe"):
-        return {"status": "ignored", "reason": "Mensaje enviado por el bot (fromMe=true)"}
-    '''
+    # Habilitar Autorepuesta (Filtro fromMe eliminado para pruebas)
+
     remote_jid = key.get("remoteJid")
     if not remote_jid:
         return {"status": "ignored", "reason": "No se encontró remoteJid"}
