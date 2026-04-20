@@ -29,7 +29,10 @@ else:
 # Variables para Google Gemini
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY:
+    print("Iniciando conexión con Gemini...")
     genai.configure(api_key=GEMINI_API_KEY)
+
+model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
 def get_db() -> Client:
     if not supabase:
@@ -147,8 +150,6 @@ def normalizar_texto(texto: str) -> str:
 def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) -> str:
     """Genera la respuesta dinámica usando el modelo Gemini."""
     try:
-        model = genai.GenerativeModel(model_name='gemini-1.5-flash')
-        
         # Regla estricta de estrellas
         regla_estrellas = (
             "ESTRICTAMENTE PROHIBIDO usar emojis de estrellas (⭐) o mencionar calificaciones numéricas. Limítate a nombre, autor, editorial, precio y sinopsis."
