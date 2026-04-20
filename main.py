@@ -144,20 +144,30 @@ def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) 
         # 1. Filtrado en Python para evitar alucinaciones
         libros_encontrados = []
         pregunta_limpia = pregunta.lower().strip()
+        palabras_pregunta = set(pregunta_limpia.split())
         
         for libro in datos_db:
-            nombre_libro = libro.get('nombre', '').lower()
-            if pregunta_limpia in nombre_libro:
+            nombre_libro = libro.get('nombre', '').lower().strip()
+            palabras_libro = set(nombre_libro.split())
+            
+            # Buscamos coincidencia exacta o intersección de palabras clave
+            if pregunta_limpia in nombre_libro or nombre_libro in pregunta_limpia or palabras_pregunta.intersection(palabras_libro):
                 libros_encontrados.append(libro)
+        
+        # Log de Verificación en Railway
+        print("--- LOG DE FILTRO PYTHON ---")
+        print(f"Buscando: '{pregunta_limpia}'")
+        print(f"Libros enviados a la IA: {[l.get('nombre') for l in libros_encontrados]}")
+        print("----------------------------")
         
         # 2. Lógica de Contexto
         if libros_encontrados:
-            contexto_ia = f"LISTA DE LIBROS ENCONTRADOS: {json.dumps(libros_encontrados, ensure_ascii=False)}"
-            instruccion_contexto = "REGLA DE ORO: Si recibes una lista de \"libros encontrados\", tu única misión es presentar esos libros con alegría galáctica y su precio."
+            contexto_ia = f"RESULTADOS PRIORITARIOS: {json.dumps(libros_encontrados, ensure_ascii=False)}"
+            instruccion_contexto = "REGLA DE ORO: Si recibes una lista de \"RESULTADOS PRIORITARIOS\", tu única misión es presentar esos libros con alegría galáctica y su precio."
         else:
             # Si no hay coincidencias, sugerir máximo 3 para el fallback
             libros_sugeridos = datos_db[:3]
-            contexto_ia = f"LISTA DE LIBROS ENCONTRADOS: []\nLISTA DE LIBROS SUGERIDOS: {json.dumps(libros_sugeridos, ensure_ascii=False)}"
+            contexto_ia = f"RESULTADOS PRIORITARIOS: []\nLISTA DE LIBROS SUGERIDOS: {json.dumps(libros_sugeridos, ensure_ascii=False)}"
             instruccion_contexto = "REGLA DE EMERGENCIA: Si la lista de encontrados está vacía, dile al usuario que tus radares no detectaron ese libro específico y sugiere amablemente los \"libros sugeridos\" que te pasé."
 
         prompt_sistema = f"""
