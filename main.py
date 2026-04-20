@@ -182,7 +182,7 @@ def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) 
             return "¡Mis bigotes perciben estática galáctica! 🔌🌌 La conexión con la nave central no está configurada."
 
         response = client.models.generate_content(
-            model='gemini-1.5-flash',
+            model='models/gemini-1.5-flash',
             contents=prompt_sistema
         )
         return response.text.strip()
