@@ -2,7 +2,6 @@ import os
 import requests
 import re
 import json
-import google.generativeai as genai
 from fastapi import FastAPI, HTTPException, Request
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -25,14 +24,6 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     supabase: Client | None = None
 else:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# Variables para Google Gemini
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if GEMINI_API_KEY:
-    print("Estabilizando conexión: Regreso a SDK estable 1.5...")
-    genai.configure(api_key=GEMINI_API_KEY)
-
-model = genai.GenerativeModel('gemini-1.5-flash-8b')
 
 def get_db() -> Client:
     if not supabase:
@@ -178,9 +169,17 @@ def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) 
         Solicitud original enviada por el usuario: "{pregunta}"
         Base de Datos JSON (Tu ÚNICA fuente de información): {json.dumps(datos_db, ensure_ascii=False)}
         """
+        api_key = os.getenv("GEMINI_API_KEY")
+        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
+
+        payload = {
+            "contents": [{"parts": [{"text": prompt_sistema}]}]
+        }
+
+        response = requests.post(url, json=payload)
+        response.raise_for_status()
         
-        response = model.generate_content(prompt_sistema)
-        return response.text.strip()
+        return response.json()['candidates'][0]['content']['parts'][0]['text'].strip()
     except Exception as e:
         print(f"Error generando respuesta con Gemini: {e}")
         return "¡Mis bigotes perciben estática galáctica! 🔌🌌 Tuve un error de conexión con la nave central. Por favor, intenta de nuevo en unos minutos."
