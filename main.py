@@ -1,6 +1,8 @@
 import os
 import requests
 import re
+import json
+import google.generativeai as genai
 from fastapi import FastAPI, HTTPException, Request
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -23,6 +25,10 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     supabase: Client | None = None
 else:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# Variables para Google Gemini
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyAwdqYCLpSOxiJnphTm3fjk36FRsPkV_UU")
+genai.configure(api_key=GEMINI_API_KEY)
 
 def get_db() -> Client:
     if not supabase:
@@ -135,6 +141,47 @@ def normalizar_texto(texto: str) -> str:
     for a, b in zip("áéíóú", "aeiou"):
         limpio = limpio.replace(a, b)
     return limpio
+
+
+def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) -> str:
+    """Genera la respuesta dinámica usando el modelo Gemini."""
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        # Regla estricta de estrellas
+        regla_estrellas = (
+            "ESTRICTAMENTE PROHIBIDO usar emojis de estrellas (⭐) o mencionar calificaciones numéricas. Limítate a nombre, autor, editorial, precio y sinopsis."
+            if tipo_busqueda != "estrellas"
+            else "Puedes usar emojis de estrellas (⭐) para mostrar la calificación del producto de forma colorida."
+        )
+
+        prompt_sistema = f"""
+        Eres Cometa, la Gata Galáctica 🐱🚀, guía y asistente estelar de la Librería Mikrokosmos.
+        Tu personalidad es entusiasta, servicial y usas terminología espacial (ej: nebulosa, orbitar, radar, satélites, dimensiones, agujeros negros) y emojis acordes (🐾, 🛰️, 🌌, 🔭).
+        
+        FORMATO DE RESPUESTA:
+        - Evita introducciones genéricas aburridas de IA; asume tu rol inmediatamente.
+        - Presenta la información de forma clara y atractiva visualmente (usa viñetas y negritas para resaltar Título, Autor y Precio).
+
+        REGLA DE LA FUENTE DE VERDAD:
+        Debes responder a la solicitud del usuario usando ÚNICAMENTE los datos en formato JSON de la Base de Datos que te entregaré a continuación. NO inventes libros, detalles ni precios que no vengan en este JSON.
+        
+        REGLA DE CALIFICACIONES:
+        {regla_estrellas}
+        
+        FALLBACK DE RESULTADOS:
+        Si la Base de Datos que recibes a continuación contiene listas de productos, pero tú notas por tu razonamiento que no se trata de una coincidencia exacta de lo que pidió el usuario, (o si no se encontró lo que pidió explícitamente), DEBES decirle al usuario usando tu personalidad que no detectaste rastros precisos o que hubo un error radar, pero que lograste rastrear estos otros "satélites/tesoros" cercanos que le pueden gustar y muéstrale la lista que te paso.
+        Si la lista de base de datos está totalmente vacía `[]`, discúlpate cósmicamente y dile que explore otro sector (por ejemplo, buscar por género o pedir ayuda).
+
+        Solicitud original enviada por el usuario: "{pregunta}"
+        Base de Datos JSON (Tu ÚNICA fuente de información): {json.dumps(datos_db, ensure_ascii=False)}
+        """
+        
+        response = model.generate_content(prompt_sistema)
+        return response.text.strip()
+    except Exception as e:
+        print(f"Error generando respuesta con Gemini: {e}")
+        return "¡Mis bigotes perciben estática galáctica! 🔌🌌 Tuve un error de conexión con la nave central. Por favor, intenta de nuevo en unos minutos."
 
 
 @app.post("/webhook")
@@ -257,77 +304,16 @@ async def webhook_evolution(request: Request):
                         resultados = response.data
                 except Exception: pass
 
-        # 3. Formateo de la Respuesta
-        if resultados:
-            if tipo_busqueda in ["nombre", "estrellas"] and len(resultados) == 1:
-                item = resultados[0]
-                detalles = item.get('libro_detalles') or {}
-                
-                estrellas_str = ""
-                if tipo_busqueda == "estrellas":
-                    estrellas_visual = get_stars_emoji(item.get('estrellas', 0))
-                    estrellas_str = f"✨ Calificación: {estrellas_visual}\n"
-                
-                sinopsis = detalles.get('sinopsis', 'Sin sinopsis disponible.')
-                if len(sinopsis) > 150:
-                    sinopsis = sinopsis[:147] + "..."
-
-                mensaje_respuesta = (
-                    f"{saludo_cometa}"
-                    f"¡Miau! Mis bigotes espaciales detectan algo... ¡He orbitado y encontrado este tesoro!\n\n"
-                    f"📖 *{item.get('nombre')}*\n"
-                    f"✍️ Autor: {detalles.get('autor', 'N/A')}\n"
-                    f"🏢 Editorial: {detalles.get('editorial', 'N/A')}\n"
-                    f"💰 Precio: *${item.get('precio')}*\n"
-                    f"{estrellas_str}"
-                    f"📝 Sinopsis: {sinopsis}"
-                    f"{cierre}"
-                )
-            else:
-                # Resultados múltiples (Género, Editorial o búsqueda amplia)
-                libros_texto = ""
-                for lb in resultados[:5]:
-                    estrellas_str = f" {get_stars_emoji(lb.get('estrellas', 0))}" if tipo_busqueda == "estrellas" else ""
-                    libros_texto += f"📖 *{lb.get('nombre')}* - ${lb.get('precio', 0)}{estrellas_str}\n"
-                
-                context_msg = "¡Miau! Mis bigotes espaciales detectaron estos tesoros."
-                if tipo_busqueda == "genero":
-                    context_msg = f"Aterrizando en el sector de {termino.capitalize()}... 🐾🚀"
-                elif tipo_busqueda == "editorial":
-                    context_msg = f"Explorando la nebulosa de {termino.capitalize()}... 🐱🌌"
-
-                mensaje_respuesta = (
-                    f"{saludo_cometa}"
-                    f"{context_msg}\n\n"
-                    f"{libros_texto.strip()}"
-                    f"{cierre}"
-                )
-        else:
-            # Fallback (Opciones Parecidas)
-            fallback_resultados = []
+        # 3. Formateo de la Respuesta con Google Gemini
+        datos_enviar = resultados
+        if not resultados:
             try:
                  resp_fallback = db.table('producto').select('nombre, precio, estrellas, libro_detalles(autor, editorial, genero, sinopsis)').limit(3).execute()
-                 fallback_resultados = resp_fallback.data
-            except Exception: pass
-
-            if fallback_resultados:
-                libros_texto = ""
-                for lb in fallback_resultados:
-                    libros_texto += f"📖 *{lb.get('nombre')}* - ${lb.get('precio', 0)}\n"
-                
-                mensaje_respuesta = (
-                    f"{saludo_cometa}"
-                    f"¡Pucha! 😿 No encontré ese título exacto en mis archivos gatunos, pero quizás te gusten estos otros tesoros de la galaxia:\n\n"
-                    f"{libros_texto.strip()}"
-                    f"{cierre}"
-                )
-            else:
-                mensaje_respuesta = (
-                    f"{saludo_cometa}"
-                    f"¡Pucha! 🚀 He explorado el sector, pero no detecté rastro de *{termino}*. 😔\n\n"
-                    f"¡Sigo lista para orbitar hacia otras coordenadas!"
-                    f"{cierre}"
-                )
+                 datos_enviar = resp_fallback.data
+            except Exception:
+                 datos_enviar = []
+                 
+        mensaje_respuesta = generar_respuesta_cometa(texto_bruto, datos_enviar, tipo_busqueda)
 
 
     # 8. Enviar la respuesta
