@@ -147,7 +147,7 @@ def normalizar_texto(texto: str) -> str:
 def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) -> str:
     """Genera la respuesta dinámica usando el modelo Gemini."""
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel(model_name='gemini-1.5-flash')
         
         # Regla estricta de estrellas
         regla_estrellas = (
