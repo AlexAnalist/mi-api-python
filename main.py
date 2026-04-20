@@ -139,39 +139,42 @@ def normalizar_texto(texto: str) -> str:
 
 
 def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) -> str:
-    """Genera la respuesta dinámica usando el modelo Gemini."""
+    """Genera la respuesta dinámica usando el modelo Groq con filtrado previo."""
     try:
-        # Regla estricta de estrellas
-        regla_estrellas = (
-            "ESTRICTAMENTE PROHIBIDO usar emojis de estrellas (⭐) o mencionar calificaciones numéricas. Limítate a nombre, autor, editorial, precio y sinopsis."
-            if tipo_busqueda != "estrellas"
-            else "Puedes usar emojis de estrellas (⭐) para mostrar la calificación del producto de forma colorida."
-        )
+        # 1. Filtrado en Python para evitar alucinaciones
+        libros_encontrados = []
+        pregunta_limpia = pregunta.lower().strip()
+        
+        for libro in datos_db:
+            nombre_libro = libro.get('nombre', '').lower()
+            if pregunta_limpia in nombre_libro:
+                libros_encontrados.append(libro)
+        
+        # 2. Lógica de Contexto
+        if libros_encontrados:
+            contexto_ia = f"LISTA DE LIBROS ENCONTRADOS: {json.dumps(libros_encontrados, ensure_ascii=False)}"
+            instruccion_contexto = "REGLA DE ORO: Si recibes una lista de \"libros encontrados\", tu única misión es presentar esos libros con alegría galáctica y su precio."
+        else:
+            # Si no hay coincidencias, sugerir máximo 3 para el fallback
+            libros_sugeridos = datos_db[:3]
+            contexto_ia = f"LISTA DE LIBROS ENCONTRADOS: []\nLISTA DE LIBROS SUGERIDOS: {json.dumps(libros_sugeridos, ensure_ascii=False)}"
+            instruccion_contexto = "REGLA DE EMERGENCIA: Si la lista de encontrados está vacía, dile al usuario que tus radares no detectaron ese libro específico y sugiere amablemente los \"libros sugeridos\" que te pasé."
 
         prompt_sistema = f"""
-        Eres Cometa, la Gata Galáctica 🐱🚀, guía y asistente estelar de la Librería Mikrokosmos.
-        Tu personalidad es entusiasta, servicial y usas terminología espacial (ej: nebulosa, orbitar, radar, satélites, dimensiones, agujeros negros) y emojis acordes (🐾, 🛰️, 🌌, 🔭).
+        Eres Cometa, el gato espacial de la Librería Mikrokosmos.
+        
+        {instruccion_contexto}
+        
+        PROHIBIDO: No inventes libros que no estén en la lista proporcionada ni digas que encontraste algo si no está en el contexto.
         
         FORMATO DE RESPUESTA:
-        - Evita introducciones genéricas aburridas de IA; asume tu rol inmediatamente.
-        - Presenta la información de forma clara y atractiva visualmente (usa viñetas y negritas para resaltar Título, Autor y Precio).
-        - Si encuentras el libro exacto pedido por el usuario, muéstralo de PRIMERO con un mensaje de éxito espacial entusiasta.
-
-        REGLA DE LA FUENTE DE VERDAD (PRIORIDAD ABSOLUTA):
-        - Debes responder usando ÚNICAMENTE los datos JSON de la Base de Datos que te entregaré. NO inventes nada.
-        - ANTES de decir que no encontraste un libro, revisa la lista campo por campo. Si el nombre coincide aunque sea PARCIALMENTE (ej: "cazadores" con "Cazadores de Sombras"), DEBES confirmar que lo encontraste.
-        - La búsqueda debe ser flexible: NO seas sensible a mayúsculas/minúsculas.
+        - Usa terminología espacial y emojis acordes (🐾, 🛰️, 🌌, 🔭).
+        - Sé breve, amable y visualmente claro (usa viñetas y negritas).
         
-        REGLA DE CALIFICACIONES:
-        {regla_estrellas}
-        
-        FALLBACK DE RESULTADOS:
-        - Solo si no detectas NADA parecido a la búsqueda (ni coincidencia parcial), discúlpate cósmicamente y ofrece los otros "satélites/tesoros" cercanos de la lista enviada.
-        - Si la lista de base de datos está totalmente vacía `[]`, dile que explore otro sector (ej: buscar por género).
-
-        Solicitud original enviada por el usuario: "{pregunta}"
-        Base de Datos JSON (Tu ÚNICA fuente de información): {json.dumps(datos_db, ensure_ascii=False)}
+        CONTEXTO ACTUAL PARA TU RESPUESTA:
+        {contexto_ia}
         """
+
         api_key = os.getenv("GROQ_API_KEY")
         url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {
@@ -184,7 +187,7 @@ def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) 
                 {"role": "system", "content": prompt_sistema},
                 {"role": "user", "content": pregunta}
             ],
-            "temperature": 0.7
+            "temperature": 0.3
         }
         response = requests.post(url, json=payload, headers=headers)
         response.raise_for_status()
@@ -323,7 +326,7 @@ async def webhook_evolution(request: Request):
             except Exception:
                  datos_enviar = []
                  
-        mensaje_respuesta = generar_respuesta_cometa(texto_bruto, datos_enviar, tipo_busqueda)
+        mensaje_respuesta = generar_respuesta_cometa(query_usuario, datos_enviar, tipo_busqueda)
 
 
     # 8. Enviar la respuesta
