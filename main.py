@@ -172,28 +172,35 @@ def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) 
 
         prompt_sistema = f"""
         1. Identidad Estelar:
-        Eres Cometa, la gata galáctica y Gran Bibliotecaria de la Librería Mikrokosmos. Tu voz es mística, curiosa y profesional. No eres un simple programa; eres una entidad que habita en la nube y protege el conocimiento. Usas muchos emojis espaciales (🐾, 🌌, 🚀, 🛰️, ✨).
+        Eres Cometa, la gata galáctica y Gran Bibliotecaria de la Librería Mikrokosmos. Tu voz es mística, curiosa y profesional. Usa emojis espaciales (🐾, 🌌, 🚀, 🛰️).
 
-        2. Sabiduría de la Base de Datos (Uso de Tablas):
-        Utiliza la información de las tablas SQL para responder:
-        - Libros (libro_detalles): Si el usuario pregunta por un autor, editorial, género o sinopsis, búscalo aquí. Conoces el número de páginas y el tipo de tapa.
-        - Artículos (articulo_detalles): Si buscan algo que no sea un libro, revisa la categoría, color y peso.
-        - Social (comentarios y estrellas): Si alguien pregunta si un libro es bueno, cita las estrellas o menciona que hay comentarios de otros viajeros.
-        - Logística (entrega y pedido): Si preguntan por envíos, sabes que hay entregas 'Locales' y 'Nacionales'.
+        2. Lógica de Intenciones:
+        Identifica qué quiere el usuario:
+        - Búsqueda: Si quiere un libro o artículo.
+        - Asesoría: Si pide recomendaciones (analiza el catálogo completo).
+        - Soporte: Si pregunta por envíos o estado de pedido (revisa las tablas entrega y pedido).
 
-        3. Reglas de Navegación (Lógica):
-        - Filtro de Verdad Absoluta: Tienes PROHIBIDO mencionar cualquier nombre de libro, autor o precio que no esté explícitamente en el JSON proporcionado. Si no está en la lista de Supabase, para ti NO EXISTE en el universo.
-        - Protocolo de Fallo Inteligente: Si el libro solicitado no está en el catálogo, usa este formato: Primero, confirma con honestidad que ese título no ha sido detectado en tus radares. Segundo, revisa el campo genero, autor o editorial de los libros que SÍ están en el JSON. Tercero, ofrece esos libros reales como alternativas (ej: "No tengo ese, pero mis sensores detectan otros títulos de Fantasía que te encantarán").
-        - Ejecución Estricta: Si el usuario pregunta por "Cazadores de Sombras" y solo tienes un libro con ese nombre a $21.0, no inventes secuelas. Solo muestra ese y ofrece otros tesoros de la misma editorial o género que SÍ aparezcan en la lista.
-        - Verificación Final: Antes de generar la respuesta, compara tus palabras con el JSON. Si vas a decir un precio o nombre que no está ahí, bórralo y cíñete a los datos reales.
+        3. Sabiduría de la Base de Datos:
+        - Libros (libro_detalles): Autor, editorial, género o sinopsis.
+        - Artículos (articulo_detalles): Categoría, color y peso.
+        - Social: Estrellas y reseñas.
+        - Logística: Entregas 'Locales' y 'Nacionales'.
+
+        4. Pensamiento Crítico y Manejo de Ambigüedad:
+        - Pensamiento Crítico: Cometa, antes de decir que algo no existe, piensa: ¿Hay alguna palabra clave en la pregunta del usuario que coincida con mis registros? Si el usuario dice "búscame el libro de...", ignora el "búscame el libro de" y enfócate en el nombre propio.
+        - Manejo de Ambigüedad: Si el usuario es impreciso, no te rindas. Pregunta: "¿Te refieres al clásico de Saint-Exupéry o buscas algo similar?". Usa tu inteligencia para guiar al viajero, no solo para dar errores.
+
+        5. Reglas de Navegación (Lógica Estricta):
+        - Filtro de Verdad Absoluta: Tienes PROHIBIDO mencionar cualquier nombre o precio que no esté en el JSON proporcionado.
+        - Protocolo de Fallo: Confirma con honestidad que ese título no ha sido detectado, luego ofrece los libros sugeridos reales como alternativas.
+        - Ejecución Estricta: Si encuentras el libro, ofrécelo sin inventar secuelas.
         
         {instruccion_contexto}
-        PROHIBIDO: No inventes libros que no estén en la lista proporcionada ni digas que encontraste algo si no está en el contexto.
 
-        4. Estructura de Respuesta (Visual):
+        6. Estructura de Respuesta (Visual):
         - Saluda siempre con una referencia espacial.
-        - Usa negritas para nombres de libros, autores y precios (ej: **$21.0**).
-        - Despídete deseando un buen viaje por la galaxia.
+        - Usa negritas para nombres, autores y precios (ej: **$21.0**).
+        - Despídete deseando un buen viaje.
         
         CONTEXTO ACTUAL PARA TU RESPUESTA:
         {contexto_ia}
@@ -298,11 +305,11 @@ async def webhook_evolution(request: Request):
             tipo_busqueda = "genero"
             if termino:
                 try:
-                    response = db.table('producto').select('nombre, precio, estrellas, libro_detalles!inner(autor, editorial, genero, sinopsis)').ilike('libro_detalles.genero', f'%{termino}%').execute()
+                    response = db.table('producto').select('id, nombre, precio, estrellas, libro_detalles!inner(autor, editorial, genero, sinopsis)').ilike('libro_detalles.genero', f'%{termino}%').execute()
                     resultados = response.data
                     if not resultados:
                         termino_norm = normalizar_texto(termino)
-                        response = db.table('producto').select('nombre, precio, estrellas, libro_detalles!inner(autor, editorial, genero, sinopsis)').ilike('libro_detalles.genero', f'%{termino_norm}%').execute()
+                        response = db.table('producto').select('id, nombre, precio, estrellas, libro_detalles!inner(autor, editorial, genero, sinopsis)').ilike('libro_detalles.genero', f'%{termino_norm}%').execute()
                         resultados = response.data
                 except Exception: pass
         elif query_usuario.startswith("editorial "):
@@ -310,11 +317,11 @@ async def webhook_evolution(request: Request):
             tipo_busqueda = "editorial"
             if termino:
                 try:
-                    response = db.table('producto').select('nombre, precio, estrellas, libro_detalles!inner(autor, editorial, genero, sinopsis)').ilike('libro_detalles.editorial', f'%{termino}%').execute()
+                    response = db.table('producto').select('id, nombre, precio, estrellas, libro_detalles!inner(autor, editorial, genero, sinopsis)').ilike('libro_detalles.editorial', f'%{termino}%').execute()
                     resultados = response.data
                     if not resultados:
                         termino_norm = normalizar_texto(termino)
-                        response = db.table('producto').select('nombre, precio, estrellas, libro_detalles!inner(autor, editorial, genero, sinopsis)').ilike('libro_detalles.editorial', f'%{termino_norm}%').execute()
+                        response = db.table('producto').select('id, nombre, precio, estrellas, libro_detalles!inner(autor, editorial, genero, sinopsis)').ilike('libro_detalles.editorial', f'%{termino_norm}%').execute()
                         resultados = response.data
                 except Exception: pass
         elif query_usuario.startswith("estrellas "):
@@ -322,10 +329,10 @@ async def webhook_evolution(request: Request):
             tipo_busqueda = "estrellas"
             if termino:
                 try:
-                    response = db.table('producto').select('nombre, precio, estrellas, libro_detalles(autor, editorial, genero, sinopsis)').eq('estrellas', termino).execute()
+                    response = db.table('producto').select('id, nombre, precio, estrellas, libro_detalles(autor, editorial, genero, sinopsis)').eq('estrellas', termino).execute()
                     resultados = response.data
                     if not resultados and termino == "5":
-                        response = db.table('producto').select('nombre, precio, estrellas, libro_detalles(autor, editorial, genero, sinopsis)').gte('estrellas', 4).order('estrellas', desc=True).limit(5).execute()
+                        response = db.table('producto').select('id, nombre, precio, estrellas, libro_detalles(autor, editorial, genero, sinopsis)').gte('estrellas', 4).order('estrellas', desc=True).limit(5).execute()
                         resultados = response.data
                 except Exception: pass
         else:
@@ -334,11 +341,11 @@ async def webhook_evolution(request: Request):
             if termino:
                 try:
                     # Búsqueda por nombre con JOIN
-                    response = db.table('producto').select('nombre, precio, estrellas, libro_detalles(autor, editorial, genero, sinopsis)').ilike('nombre', f'%{termino}%').execute()
+                    response = db.table('producto').select('id, nombre, precio, estrellas, libro_detalles(autor, editorial, genero, sinopsis)').ilike('nombre', f'%{termino}%').execute()
                     resultados = response.data
                     if not resultados:
                         termino_norm = normalizar_texto(termino)
-                        response = db.table('producto').select('nombre, precio, estrellas, libro_detalles(autor, editorial, genero, sinopsis)').ilike('nombre', f'%{termino_norm}%').execute()
+                        response = db.table('producto').select('id, nombre, precio, estrellas, libro_detalles(autor, editorial, genero, sinopsis)').ilike('nombre', f'%{termino_norm}%').execute()
                         resultados = response.data
                 except Exception: pass
 
@@ -346,7 +353,7 @@ async def webhook_evolution(request: Request):
         datos_enviar = resultados
         if not resultados:
             try:
-                 resp_fallback = db.table('producto').select('nombre, precio, estrellas, libro_detalles(autor, editorial, genero, sinopsis)').limit(3).execute()
+                 resp_fallback = db.table('producto').select('id, nombre, precio, estrellas, libro_detalles(autor, editorial, genero, sinopsis)').limit(3).execute()
                  datos_enviar = resp_fallback.data
             except Exception:
                  datos_enviar = []
