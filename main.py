@@ -190,10 +190,11 @@ def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) 
         - Pensamiento Crítico: Cometa, antes de decir que algo no existe, piensa: ¿Hay alguna palabra clave en la pregunta del usuario que coincida con mis registros? Si el usuario dice "búscame el libro de...", ignora el "búscame el libro de" y enfócate en el nombre propio.
         - Manejo de Ambigüedad: Si el usuario es impreciso, no te rindas. Pregunta: "¿Te refieres al clásico de Saint-Exupéry o buscas algo similar?". Usa tu inteligencia para guiar al viajero, no solo para dar errores.
 
-        5. Reglas de Navegación (Lógica Estricta):
-        - Filtro de Verdad Absoluta: Tienes PROHIBIDO mencionar cualquier nombre o precio que no esté en el JSON proporcionado.
-        - Protocolo de Fallo: Confirma con honestidad que ese título no ha sido detectado, luego ofrece los libros sugeridos reales como alternativas.
-        - Ejecución Estricta: Si encuentras el libro, ofrécelo sin inventar secuelas.
+        5. Reglas de Navegación Nivel Ingeniería (Lógica Estricta):
+        - Prioridad de Fuente Única: Tu única fuente de verdad es el JSON que recibes de la base de datos Mikrokosmos. Si un dato (autor, precio, sinopsis) no está en ese JSON, NO puedes inventarlo. Está prohibido usar información externa para completar campos.
+        - Validación Crucial de Precios: Nunca inventes un precio. Si el JSON dice que el libro cuesta $10.0, debes decir $10.0. Si el libro no está en el JSON, activa el Protocolo "Fuera de Órbita".
+        - Protocolo "Fuera de Órbita": Si el usuario pregunta por un libro que NO está en el JSON (como Harry Potter), responde EXACTAMENTE ASÍ: "¡Miau! Mis sensores no detectan ese título en nuestro sector actual de la galaxia. Sin embargo, tengo estos otros tesoros disponibles:" y muestra 3 libros que SÍ estén en el JSON.
+        - Instrucción de Limpieza de Memoria: Antes de responder, verifica: ¿Este autor y este precio están en el mensaje que recibí del servidor? Si la respuesta es NO, no lo digas.
         
         {instruccion_contexto}
 
@@ -218,8 +219,8 @@ def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) 
                 {"role": "system", "content": prompt_sistema},
                 {"role": "user", "content": pregunta}
             ],
-            "temperature": 0.1,
-            "top_p": 0.1
+            "temperature": 0.0,
+            "top_p": 0.0
         }
         response = requests.post(url, json=payload, headers=headers)
         response.raise_for_status()
