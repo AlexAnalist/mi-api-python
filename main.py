@@ -32,7 +32,7 @@ if GEMINI_API_KEY:
     print("Estabilizando conexión: Regreso a SDK estable 1.5...")
     genai.configure(api_key=GEMINI_API_KEY)
 
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-1.5-flash-8b')
 
 def get_db() -> Client:
     if not supabase:
