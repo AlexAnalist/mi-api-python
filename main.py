@@ -27,8 +27,9 @@ else:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Variables para Google Gemini
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyAwdqYCLpSOxiJnphTm3fjk36FRsPkV_UU")
-genai.configure(api_key=GEMINI_API_KEY)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 def get_db() -> Client:
     if not supabase:
