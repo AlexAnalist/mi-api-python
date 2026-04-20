@@ -170,7 +170,7 @@ def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) 
         Base de Datos JSON (Tu ÚNICA fuente de información): {json.dumps(datos_db, ensure_ascii=False)}
         """
         api_key = os.getenv("GEMINI_API_KEY")
-        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
 
         payload = {
             "contents": [{"parts": [{"text": prompt_sistema}]}]
