@@ -31,7 +31,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 client = None
 if GEMINI_API_KEY:
     print("Iniciando conexión con el nuevo SDK de Gemini...")
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    client = genai.Client(api_key=GEMINI_API_KEY, http_options={'api_version': 'v1'})
 
 def get_db() -> Client:
     if not supabase:
