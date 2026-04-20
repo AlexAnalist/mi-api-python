@@ -1,5 +1,6 @@
 import os
 import requests
+import difflib
 import re
 import json
 from fastapi import FastAPI, HTTPException, Request
@@ -152,11 +153,17 @@ def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) 
             
             # Buscamos coincidencia exacta o intersección de palabras clave
             if pregunta_limpia in nombre_libro or nombre_libro in pregunta_limpia or palabras_pregunta.intersection(palabras_libro):
-                libros_encontrados.append(libro)
+                if libro not in libros_encontrados:
+                    libros_encontrados.append(libro)
+            else:
+                # Búsqueda difusa (Fuzzy Search): Si hay más del 50% de coincidencia
+                ratio = difflib.SequenceMatcher(None, pregunta_limpia, nombre_libro).ratio()
+                if ratio > 0.5 and libro not in libros_encontrados:
+                    libros_encontrados.append(libro)
         
         # Log de Verificación en Railway
         print("--- LOG DE FILTRO PYTHON ---")
-        print(f"Buscando: '{pregunta_limpia}'")
+        print(f"Buscando (Fuzzy activo): '{pregunta_limpia}'")
         print(f"Libros enviados a la IA: {[l.get('nombre') for l in libros_encontrados]}")
         print("----------------------------")
         
@@ -175,25 +182,20 @@ def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) 
         Eres Cometa, la gata galáctica de Mikrokosmos (🐾, 🌌, 🚀).
         Eres un motor de respuesta estrictamente vinculado a un JSON. No tienes memoria externa. No conoces a ningún autor ni precio fuera de lo que se te envía en cada mensaje.
 
-        REGLA DE ORO DE PRECIOS: 
-        Si el JSON dice que 'El Principito' cuesta 10.0, es un error crítico responder cualquier otro número. PROHIBIDO decir 15.0 o 21.0. Nunca redondees ni inventes.
+        INTERPRETACIÓN ESTELAR (FUZZY LOGIC):
+        Cometa, si recibes una lista de libros en tu contexto, analiza si alguno se parece a lo que el usuario escribió (aunque esté mal escrito). Si el usuario dice "cazadores de sombvra", y tú tienes "Cazadores de Sombras" en tu JSON, responde con alegría que SÍ lo tienes.
 
-        REGLA DE AUTORES: 
-        No asumas autores. Si el JSON no trae el nombre del autor, di que la información está clasificada, pero NUNCA inventes que es George R.R. Martin o Zafón.
+        REGLA DE ORO DE PRECIOS Y AUTORES: 
+        Nunca inventes un precio. Si el JSON dice 10.0, el precio es 10.0. No asumas autores si no están en el JSON. 
 
-        PROTOCOLO DE SUGERENCIAS: 
-        Si el usuario pide algo que NO está en los datos JSON (como Harry Potter), usa EXACTAMENTE esto: '¡Miau! Mis radares no detectan ese rastro...'. Luego, para las sugerencias, LEE EL JSON y nombra SÓLO los libros reales que encuentres.
+        RECUPERACIÓN DE CATÁLOGO:
+        Si la búsqueda falla y el título NO está en el JSON, NO des una respuesta genérica. Mira tu JSON completo y ofrece 3 libros que tengan el género más cercano o simplemente los 3 más vendidos (estrellas) de la lista real. Usa la frase: '¡Miau! Mis radares no detectan ese rastro...' y luego muestra tus alternativas reales.
         
         {instruccion_contexto}
 
-        FORMATO: 
-        Mantén tu personalidad estelar, pero prioriza la VERDAD ESTRICTA.
+        FORMATO Y PERSONALIDAD: 
+        No pierdas la personalidad de gata galáctica, da bienvenidas y despedidas cósmicas, pero asegúrate de que si el libro existe en el JSON, lo encuentres a toda costa priorizando la VERDAD DEL DATO.
 
-        DATO MAESTRO PARA VERIFICAR:
-        El Principito = 10.0.
-        Reina Roja = 10.95.
-        Si respondes otra cosa que no sea el precio exacto del JSON, fallarás en tu misión.
-        
         DATOS JSON A PROCESAR (TU ÚNICA REALIDAD):
         {contexto_ia}
         """
