@@ -2,7 +2,7 @@ import os
 import requests
 import re
 import json
-from google import genai
+import google.generativeai as genai
 from fastapi import FastAPI, HTTPException, Request
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -28,10 +28,11 @@ else:
 
 # Variables para Google Gemini
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-client = None
 if GEMINI_API_KEY:
-    print("Iniciando conexión con el nuevo SDK de Gemini...")
-    client = genai.Client(api_key=GEMINI_API_KEY, http_options={'api_version': 'v1'})
+    print("Estabilizando conexión: Regreso a SDK estable 1.5...")
+    genai.configure(api_key=GEMINI_API_KEY)
+
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 def get_db() -> Client:
     if not supabase:
@@ -178,13 +179,7 @@ def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) 
         Base de Datos JSON (Tu ÚNICA fuente de información): {json.dumps(datos_db, ensure_ascii=False)}
         """
         
-        if not client:
-            return "¡Mis bigotes perciben estática galáctica! 🔌🌌 La conexión con la nave central no está configurada."
-
-        response = client.models.generate_content(
-            model='models/gemini-1.5-flash',
-            contents=prompt_sistema
-        )
+        response = model.generate_content(prompt_sistema)
         return response.text.strip()
     except Exception as e:
         print(f"Error generando respuesta con Gemini: {e}")
