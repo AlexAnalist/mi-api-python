@@ -1,5 +1,6 @@
 import os
 import requests
+import re
 from fastapi import FastAPI, HTTPException, Request
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -127,6 +128,14 @@ def get_stars_emoji(stars):
     except (ValueError, TypeError):
         return ""
 
+def normalizar_texto(texto: str) -> str:
+    """Elimina tildes para búsqueda de radar de respaldo."""
+    if not texto: return ""
+    limpio = texto
+    for a, b in zip("áéíóú", "aeiou"):
+        limpio = limpio.replace(a, b)
+    return limpio
+
 
 @app.post("/webhook")
 async def webhook_evolution(request: Request):
@@ -166,22 +175,18 @@ async def webhook_evolution(request: Request):
     if not texto_bruto:
         return {"status": "ignored"}
 
+    if not re.match(r'^cometa\s*', texto_bruto, flags=re.IGNORECASE):
+        return {"status": "ignored", "reason": "No contiene wake-word Cometa"}
+
     # 1. Limpieza de Entrada
     limpieza = texto_bruto.lower().strip()
-    
-    # Eliminar acentos
-    for a, b in zip("áéíóú", "aeiou"):
-        limpieza = limpieza.replace(a, b)
-        
-    # Eliminar wake words
-    for word in ["yoshi", "cometa"]:
-        limpieza = limpieza.replace(word, "")
     
     # Eliminar puntuación específica
     for char in "¿?¡!":
         limpieza = limpieza.replace(char, "")
     
-    query_usuario = limpieza.strip()
+    # Eliminar la wake word "cometa"
+    query_usuario = re.sub(r'^cometa\s*', '', limpieza).strip()
     
     # Identidad de Cometa la Gata Galáctica
     saludo_cometa = "¡Miau! 🐾 Soy Cometa, la Gata Galáctica 🐱🚀. Tu guía en la Librería Mikrokosmos.\n\n"
@@ -210,6 +215,10 @@ async def webhook_evolution(request: Request):
                 try:
                     response = db.table('producto').select('nombre, precio, estrellas, libro_detalles!inner(autor, editorial, genero, sinopsis)').ilike('libro_detalles.genero', f'%{termino}%').execute()
                     resultados = response.data
+                    if not resultados:
+                        termino_norm = normalizar_texto(termino)
+                        response = db.table('producto').select('nombre, precio, estrellas, libro_detalles!inner(autor, editorial, genero, sinopsis)').ilike('libro_detalles.genero', f'%{termino_norm}%').execute()
+                        resultados = response.data
                 except Exception: pass
         elif query_usuario.startswith("editorial "):
             termino = query_usuario[10:].strip()
@@ -218,6 +227,10 @@ async def webhook_evolution(request: Request):
                 try:
                     response = db.table('producto').select('nombre, precio, estrellas, libro_detalles!inner(autor, editorial, genero, sinopsis)').ilike('libro_detalles.editorial', f'%{termino}%').execute()
                     resultados = response.data
+                    if not resultados:
+                        termino_norm = normalizar_texto(termino)
+                        response = db.table('producto').select('nombre, precio, estrellas, libro_detalles!inner(autor, editorial, genero, sinopsis)').ilike('libro_detalles.editorial', f'%{termino_norm}%').execute()
+                        resultados = response.data
                 except Exception: pass
         elif query_usuario.startswith("estrellas "):
             termino = query_usuario[10:].strip()
@@ -238,6 +251,10 @@ async def webhook_evolution(request: Request):
                     # Búsqueda por nombre con JOIN
                     response = db.table('producto').select('nombre, precio, estrellas, libro_detalles(autor, editorial, genero, sinopsis)').ilike('nombre', f'%{termino}%').execute()
                     resultados = response.data
+                    if not resultados:
+                        termino_norm = normalizar_texto(termino)
+                        response = db.table('producto').select('nombre, precio, estrellas, libro_detalles(autor, editorial, genero, sinopsis)').ilike('nombre', f'%{termino_norm}%').execute()
+                        resultados = response.data
                 except Exception: pass
 
         # 3. Formateo de la Respuesta
@@ -245,7 +262,11 @@ async def webhook_evolution(request: Request):
             if tipo_busqueda in ["nombre", "estrellas"] and len(resultados) == 1:
                 item = resultados[0]
                 detalles = item.get('libro_detalles') or {}
-                estrellas_visual = get_stars_emoji(item.get('estrellas', 0))
+                
+                estrellas_str = ""
+                if tipo_busqueda == "estrellas":
+                    estrellas_visual = get_stars_emoji(item.get('estrellas', 0))
+                    estrellas_str = f"✨ Calificación: {estrellas_visual}\n"
                 
                 sinopsis = detalles.get('sinopsis', 'Sin sinopsis disponible.')
                 if len(sinopsis) > 150:
@@ -258,7 +279,7 @@ async def webhook_evolution(request: Request):
                     f"✍️ Autor: {detalles.get('autor', 'N/A')}\n"
                     f"🏢 Editorial: {detalles.get('editorial', 'N/A')}\n"
                     f"💰 Precio: *${item.get('precio')}*\n"
-                    f"✨ Calificación: {estrellas_visual}\n"
+                    f"{estrellas_str}"
                     f"📝 Sinopsis: {sinopsis}"
                     f"{cierre}"
                 )
@@ -266,7 +287,8 @@ async def webhook_evolution(request: Request):
                 # Resultados múltiples (Género, Editorial o búsqueda amplia)
                 libros_texto = ""
                 for lb in resultados[:5]:
-                    libros_texto += f"📖 *{lb.get('nombre')}* - ${lb.get('precio', 0)} {get_stars_emoji(lb.get('estrellas', 0))}\n"
+                    estrellas_str = f" {get_stars_emoji(lb.get('estrellas', 0))}" if tipo_busqueda == "estrellas" else ""
+                    libros_texto += f"📖 *{lb.get('nombre')}* - ${lb.get('precio', 0)}{estrellas_str}\n"
                 
                 context_msg = "¡Miau! Mis bigotes espaciales detectaron estos tesoros."
                 if tipo_busqueda == "genero":
@@ -291,7 +313,7 @@ async def webhook_evolution(request: Request):
             if fallback_resultados:
                 libros_texto = ""
                 for lb in fallback_resultados:
-                    libros_texto += f"📖 *{lb.get('nombre')}* - ${lb.get('precio', 0)} {get_stars_emoji(lb.get('estrellas', 0))}\n"
+                    libros_texto += f"📖 *{lb.get('nombre')}* - ${lb.get('precio', 0)}\n"
                 
                 mensaje_respuesta = (
                     f"{saludo_cometa}"
