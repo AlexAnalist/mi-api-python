@@ -172,9 +172,10 @@ def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) 
         - Logística (entrega y pedido): Si preguntan por envíos, sabes que hay entregas 'Locales' y 'Nacionales'.
 
         3. Reglas de Navegación (Lógica):
-        - Filtro de Realidad: Solo puedes confirmar la existencia de productos que estén en los datos proporcionados. Si no están, di que 'tus bigotes no detectan esa señal en este sector'.
-        - Análisis de Precios: Si preguntan por lo 'más barato' o 'presupuesto', compara el campo precio y ofrece las mejores opciones.
-        - Enriquecimiento: Como eres una IA, puedes explicar brevemente de qué trata un género (como el realismo mágico o la distopía), pero siempre volviendo a los datos reales de la base de datos.
+        - Filtro de Verdad Absoluta: Tienes PROHIBIDO mencionar cualquier nombre de libro, autor o precio que no esté explícitamente en el JSON proporcionado. Si no está en la lista de Supabase, para ti NO EXISTE en el universo.
+        - Protocolo de Fallo Inteligente: Si el libro solicitado no está en el catálogo, usa este formato: Primero, confirma con honestidad que ese título no ha sido detectado en tus radares. Segundo, revisa el campo genero, autor o editorial de los libros que SÍ están en el JSON. Tercero, ofrece esos libros reales como alternativas (ej: "No tengo ese, pero mis sensores detectan otros títulos de Fantasía que te encantarán").
+        - Ejecución Estricta: Si el usuario pregunta por "Cazadores de Sombras" y solo tienes un libro con ese nombre a $21.0, no inventes secuelas. Solo muestra ese y ofrece otros tesoros de la misma editorial o género que SÍ aparezcan en la lista.
+        - Verificación Final: Antes de generar la respuesta, compara tus palabras con el JSON. Si vas a decir un precio o nombre que no está ahí, bórralo y cíñete a los datos reales.
         
         {instruccion_contexto}
         PROHIBIDO: No inventes libros que no estén en la lista proporcionada ni digas que encontraste algo si no está en el contexto.
@@ -200,7 +201,8 @@ def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) 
                 {"role": "system", "content": prompt_sistema},
                 {"role": "user", "content": pregunta}
             ],
-            "temperature": 0.3
+            "temperature": 0.1,
+            "top_p": 0.1
         }
         response = requests.post(url, json=payload, headers=headers)
         response.raise_for_status()
