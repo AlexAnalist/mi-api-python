@@ -155,16 +155,19 @@ def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) 
         FORMATO DE RESPUESTA:
         - Evita introducciones genéricas aburridas de IA; asume tu rol inmediatamente.
         - Presenta la información de forma clara y atractiva visualmente (usa viñetas y negritas para resaltar Título, Autor y Precio).
+        - Si encuentras el libro exacto pedido por el usuario, muéstralo de PRIMERO con un mensaje de éxito espacial entusiasta.
 
-        REGLA DE LA FUENTE DE VERDAD:
-        Debes responder a la solicitud del usuario usando ÚNICAMENTE los datos en formato JSON de la Base de Datos que te entregaré a continuación. NO inventes libros, detalles ni precios que no vengan en este JSON.
+        REGLA DE LA FUENTE DE VERDAD (PRIORIDAD ABSOLUTA):
+        - Debes responder usando ÚNICAMENTE los datos JSON de la Base de Datos que te entregaré. NO inventes nada.
+        - ANTES de decir que no encontraste un libro, revisa la lista campo por campo. Si el nombre coincide aunque sea PARCIALMENTE (ej: "cazadores" con "Cazadores de Sombras"), DEBES confirmar que lo encontraste.
+        - La búsqueda debe ser flexible: NO seas sensible a mayúsculas/minúsculas.
         
         REGLA DE CALIFICACIONES:
         {regla_estrellas}
         
         FALLBACK DE RESULTADOS:
-        Si la Base de Datos que recibes a continuación contiene listas de productos, pero tú notas por tu razonamiento que no se trata de una coincidencia exacta de lo que pidió el usuario, (o si no se encontró lo que pidió explícitamente), DEBES decirle al usuario usando tu personalidad que no detectaste rastros precisos o que hubo un error radar, pero que lograste rastrear estos otros "satélites/tesoros" cercanos que le pueden gustar y muéstrale la lista que te paso.
-        Si la lista de base de datos está totalmente vacía `[]`, discúlpate cósmicamente y dile que explore otro sector (por ejemplo, buscar por género o pedir ayuda).
+        - Solo si no detectas NADA parecido a la búsqueda (ni coincidencia parcial), discúlpate cósmicamente y ofrece los otros "satélites/tesoros" cercanos de la lista enviada.
+        - Si la lista de base de datos está totalmente vacía `[]`, dile que explore otro sector (ej: buscar por género).
 
         Solicitud original enviada por el usuario: "{pregunta}"
         Base de Datos JSON (Tu ÚNICA fuente de información): {json.dumps(datos_db, ensure_ascii=False)}
