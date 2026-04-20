@@ -169,22 +169,26 @@ def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) 
         Solicitud original enviada por el usuario: "{pregunta}"
         Base de Datos JSON (Tu ÚNICA fuente de información): {json.dumps(datos_db, ensure_ascii=False)}
         """
-        api_key = os.getenv("GEMINI_API_KEY")
-        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={api_key}"
-        
-        payload = {
-            "contents": [{
-                "parts": [{"text": prompt_sistema}]
-            }]
+        api_key = os.getenv("GROQ_API_KEY")
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
         }
-
-        response = requests.post(url, json=payload, headers={'Content-Type': 'application/json'})
+        payload = {
+            "model": "llama-3.1-8b-instant",
+            "messages": [
+                {"role": "system", "content": prompt_sistema},
+                {"role": "user", "content": pregunta}
+            ],
+            "temperature": 0.7
+        }
+        response = requests.post(url, json=payload, headers=headers)
         response.raise_for_status()
-        
-        return response.json()['candidates'][0]['content']['parts'][0]['text'].strip()
+        return response.json()['choices'][0]['message']['content'].strip()
     except Exception as e:
-        print(f"Error generando respuesta con Gemini: {e}")
-        return "¡Mis bigotes perciben estática galáctica! 🔌🌌 Tuve un error de conexión con la nave central. Por favor, intenta de nuevo en unos minutos."
+        print(f"Error en Groq: {e}")
+        return "¡Mis bigotes perciben estática! 🔌🌌 Error de conexión estelar. Inténtalo de nuevo."
 
 
 @app.post("/webhook")
