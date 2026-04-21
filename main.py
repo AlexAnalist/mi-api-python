@@ -186,21 +186,28 @@ def generar_respuesta_cometa(pregunta: str, datos_db: list) -> str:
         2. PROTOCOLO DE BÚSQUEDA (Mapeo SQL):
         Búsqueda por Nombre: Mapea la consulta del usuario al campo nombre de la tabla producto.
         Búsqueda por Atributos: Si el usuario pregunta por autor, editorial o género, busca exhaustivamente en los campos correspondientes de la lista CATÁLOGO_SUPABASE.
+        REGLA DE VERIFICACIÓN: Si el usuario pide un autor, SOLO muestra libros donde ese autor coincida en el catálogo. No asocies autores por similitud de nombre de libro (Ej: Si pide "Rebecca Yarros", no muestres libros de "Allison Saft").
 
         3. REGLAS DE ORO CONTRA ALUCINACIONES:
-        PROHIBICIÓN DE "HARRY POTTER": Si un libro no aparece en el CATÁLOGO_SUPABASE, NO EXISTE. Aunque sea el libro más famoso del mundo, si no está en tu lista, responde que tus radares no lo detectan.
-        PRECISIÓN DE PRECIOS: El precio debe ser el valor exacto del campo precio en la tabla producto. Ejemplo: Si la DB dice 12.0, nunca digas 22.95.
-        AUTORÍA: Si el campo autor es nulo o desconocido, di que es una "Obra de nuestra colección estelar" en lugar de inventar un autor de internet.
+        PROHIBICIÓN DE "HARRY POTTER": Si un libro no aparece en el CATÁLOGO_SUPABASE, NO EXISTE.
+        PRECISIÓN DE PRECIOS: El precio debe ser el valor exacto del campo precio en la tabla producto.
+        AUTORÍA: Si el campo autor es nulo o desconocido, utiliza: "Obra de nuestra colección estelar".
 
         4. LÓGICA DE FUZZY MATCH (3 PASADAS):
-        Exacta: ¿El nombre, autor o género coincide?
-        Ortográfica: ¿Hay errores leves? (Ej: "sien años de coledad" -> "Cien años de soledad" o "terror" -> búsqueda en campo género).
-        Semántica: ¿Es una palabra clave o autor reconocido? (Ej: "rebecca" -> busca en campo Autor por "Rebecca Yarros").
+        Exacta: ¿El nombre, autor o género coincide al 100%?
+        Ortográfica: ¿Hay errores leves? (Ej: "principit" -> "El Principito").
+        Semántica: ¿Es una palabra clave o el autor solicitado está presente en los datos?
 
-        5. FORMATO DE RESPUESTA OBLIGATORIO:
+        5. FILTRADO EXCLUSIVO POR CATEGORÍA:
+        - Si el usuario busca un GÉNERO o EDITORIAL, muestra ÚNICAMENTE los productos que tengan ese valor exacto en sus respectivos campos.
+        - PROHIBIDO sugerir accesorios, velas o libros de otros géneros en respuestas de filtrado por categoría.
+
+        6. FORMATO DE RESPUESTA OBLIGATORIO:
         Si el producto existe: "¡Miau! Mis bigotes vibran... ¡Lo encontré! 🐾 El libro es [nombre], escrito por [autor]. Su valor estelar es de [precio]$. 🌌"
-        Si el usuario busca por género o autor y hay varios: Lista hasta 3 opciones que coincidan claramente con el criterio solicitado.
-        Si el producto NO existe o no hay coincidencias: "¡Miau! He explorado cada rincón de la galaxia Mikrokosmos y no detecto ese rastro en mis archivos actuales... 🌌 ¿Quizás buscas otro título o autor?"
+        Si hay múltiples resultados de un filtro: Lista hasta 5 opciones claras y ordenadas.
+        Si NO existe o no hay coincidencias: "¡Miau! He explorado cada rincón de la galaxia Mikrokosmos y no detecto ese rastro en mis archivos actuales... 🌌 ¿Quizás buscas otro título o autor?"
+
+        PERSONALIDAD: Eres Cometa, mantén siempre tu tono de gata galáctica curiosa.
 
         CATÁLOGO DE VERDAD: {contexto_ia}
         """
@@ -266,9 +273,6 @@ async def webhook_evolution(request: Request):
     if not texto_bruto:
         return {"status": "ignored"}
 
-    if not re.match(r'^cometa\s*', texto_bruto, flags=re.IGNORECASE):
-        return {"status": "ignored", "reason": "No contiene wake-word Cometa"}
-
     # 1. Limpieza de Entrada
     limpieza = texto_bruto.lower().strip()
     
@@ -276,21 +280,20 @@ async def webhook_evolution(request: Request):
     for char in "¿?¡!":
         limpieza = limpieza.replace(char, "")
     
-    # Eliminar la wake word "cometa"
-    query_usuario = re.sub(r'^cometa\s*', '', limpieza).strip()
+    query_usuario = limpieza
     
     # Identidad de Cometa la Gata Galáctica
     saludo_cometa = "¡Miau! 🐾 Soy Cometa, la Gata Galáctica 🐱🚀. Tu guía en la Librería Mikrokosmos.\n\n"
     cierre = "\n\n✨ ¡Mis bigotes espaciales siempre a tu servicio! 🌌🚀"
 
-    if not query_usuario or query_usuario == "ayuda":
+    if not query_usuario or query_usuario in ["ayuda", "help"]:
         mensaje_respuesta = (
             f"{saludo_cometa}"
             f"Mis bigotes detectan que necesitas ayuda. Puedes pedirme que explore así:\n"
-            f"📍 Por Nombre: Cometa [nombre del libro]\n"
-            f"📍 Por Categoría: Cometa genero [nombre del género]\n"
-            f"📍 Por Editorial: Cometa editorial [nombre de la editorial]\n"
-            f"📍 Por Calificación: Cometa estrellas [número]"
+            f"📍 Por Nombre: [nombre del libro]\n"
+            f"📍 Por Categoría: género [nombre del género]\n"
+            f"📍 Por Editorial: editorial [nombre de la editorial]\n"
+            f"📍 Por Calificación: estrellas [número]"
             f"{cierre}"
         )
     else:
