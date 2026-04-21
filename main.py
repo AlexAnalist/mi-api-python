@@ -139,7 +139,7 @@ def normalizar_texto(texto: str) -> str:
     return limpio
 
 
-def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) -> str:
+def generar_respuesta_cometa(pregunta: str, datos_db: list) -> str:
     """Genera la respuesta dinámica usando el modelo Groq con filtrado previo."""
     try:
         # 1. Carga Completa del Catálogo en Texto Plano (Anti-Crash ASGI)
@@ -285,7 +285,7 @@ async def webhook_evolution(request: Request):
             datos_enviar = []
                  
                  
-        mensaje_respuesta = generar_respuesta_cometa(query_usuario, datos_enviar, tipo_busqueda)
+        mensaje_respuesta = generar_respuesta_cometa(query_usuario, datos_enviar)
 
 
     # 8. Enviar la respuesta
