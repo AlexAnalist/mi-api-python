@@ -142,63 +142,39 @@ def normalizar_texto(texto: str) -> str:
 def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) -> str:
     """Genera la respuesta dinámica usando el modelo Groq con filtrado previo."""
     try:
-        # 1. Filtrado en Python para evitar alucinaciones
-        libros_encontrados = []
-        pregunta_limpia = pregunta.lower().strip()
-        palabras_pregunta = set(pregunta_limpia.split())
-        
+        # 1. Carga Completa del Catálogo en Texto
+        catalogo_text = ""
         for libro in datos_db:
-            nombre_libro = libro.get('nombre', '').lower().strip()
-            palabras_libro = set(nombre_libro.split())
-            
-            # Buscamos coincidencia exacta o intersección de palabras clave
-            if pregunta_limpia in nombre_libro or nombre_libro in pregunta_limpia or palabras_pregunta.intersection(palabras_libro):
-                if libro not in libros_encontrados:
-                    libros_encontrados.append(libro)
-            else:
-                # Búsqueda difusa (Fuzzy Search): Si hay más del 50% de coincidencia
-                ratio = difflib.SequenceMatcher(None, pregunta_limpia, nombre_libro).ratio()
-                if ratio > 0.5 and libro not in libros_encontrados:
-                    libros_encontrados.append(libro)
+             nombre = libro.get('nombre', 'Desconocido')
+             precio = libro.get('precio', 0.0)
+             catalogo_text += f"[{nombre}: {precio}], "
+             
+        if catalogo_text.endswith(", "): catalogo_text = catalogo_text[:-2]
+        
+        contexto_ia = f"CATÁLOGO_REAL: [{catalogo_text}]"
         
         # Log de Verificación en Railway
-        print("--- LOG DE FILTRO PYTHON ---")
-        print(f"Buscando (Fuzzy activo): '{pregunta_limpia}'")
-        print(f"Libros enviados a la IA: {[l.get('nombre') for l in libros_encontrados]}")
-        print("----------------------------")
-        
-        # 2. Lógica de Contexto
-        if libros_encontrados:
-            contexto_ia = f"RESULTADOS PRIORITARIOS: {json.dumps(libros_encontrados, ensure_ascii=False)}"
-            instruccion_contexto = "REGLA DE ORO: Si recibes una lista de \"RESULTADOS PRIORITARIOS\", tu única misión es presentar esos libros con alegría galáctica y su precio."
-        else:
-            # Si no hay coincidencias, sugerir máximo 3 para el fallback
-            libros_sugeridos = datos_db[:3]
-            contexto_ia = f"RESULTADOS PRIORITARIOS: []\nLISTA DE LIBROS SUGERIDOS: {json.dumps(libros_sugeridos, ensure_ascii=False)}"
-            instruccion_contexto = "REGLA DE EMERGENCIA: Si la lista de encontrados está vacía, dile al usuario que tus radares no detectaron ese libro específico y sugiere amablemente los \"libros sugeridos\" que te pasé."
+        print("--- LOG DE CARGA COMPLETA ---")
+        print(f"Pregunta del viajero: '{pregunta}'")
+        print(f"Items cargados en IA: {len(datos_db)}")
+        print("-----------------------------")
 
         prompt_sistema = f"""
-        SISTEMA DE CONTROL DE INVENTARIO MIKROKOSMOS (ESTRICTO):
+        INSTRUCCIÓN DE ANÁLISIS EXHAUSTIVO:
+        Cometa, tu memoria de corto plazo ahora contiene el CATÁLOGO_REAL. Antes de responder, lee CADA nombre de esa lista.
+        Si el usuario pregunta por algo, busca coincidencias aunque falten letras o tildes.
+        Si el usuario dice "Cazadores de sombras" y en el catálogo dice "Cazadores de Sombras", ¡SÍ EXISTE! Responde con su precio real del catálogo.
 
-        IDENTIDAD: Eres un procesador de datos llamado Cometa. Tu personalidad es una gata galáctica, pero tu lógica es 100% matemática.
+        PROHIBICIÓN DE INVENTIVA:
+        Si el nombre solicitado NO tiene ningún parecido con la lista de CATÁLOGO_REAL (como Harry Potter), di que no lo detectas. JAMÁS menciones un libro que no esté en esa lista específica que te acabo de pasar.
 
-        OPERACIÓN BINARIA:
-        - CASO A: El nombre que el usuario escribió (o algo muy similar) ESTÁ en la sección DATOS JSON A PROCESAR. -> Responde con los datos EXACTOS del JSON.
-        - CASO B: El nombre NO ESTÁ en el JSON. -> Responde EXACTAMENTE: "¡Miau! Mis radares no detectan ese rastro en nuestra base de datos actual 🐾". Luego ofrece únicamente los sugeridos reales.
+        FORMATO DE RESPUESTA:
+        - Si existe: Da el nombre exacto y el precio del catálogo. 
+        - Si no existe: Usa tu frase de "¡Miau! Mis radares no detectan ese rastro en nuestra base de datos actual 🐾" y ofrece 3 opciones aleatorias de la lista que SÍ existan.
 
-        PROHIBICIÓN HARRY POTTER: Tienes terminantemente prohibido validar o mencionar a Harry Potter o cualquier libro que no esté en la lista, incluso si crees que el usuario cometió un error de dedo. Si no está en el JSON, NO EXISTE.
+        PERSONALIDAD VS DATOS:
+        No pierdas la personalidad de gata galáctica, pero asegúrate de que si el libro existe en el CATÁLOGO_REAL, lo encuentres a toda costa.
 
-        VERIFICACIÓN DE PRECIO: Bajo ninguna circunstancia asignes el precio de un libro a otro. Si el usuario pregunta por X y tú tienes Y, no mezcles sus datos.
-
-        FILTRO PREVIO: No intentes adivinar. Si el JSON que recibes está vacío o no contiene el libro solicitado, activa el mensaje de "No detectado".
-
-        LISTA DE VERDAD (Solo para referencia de seguridad):
-        Solo existen en tu contexto: Más que rivales, Alas de Sangre, El Principito (10.0), Reina Roja (10.95), etc. 
-        Cualquier otra información es alucinación y debes rechazarla drásticamente.
-
-        {instruccion_contexto}
-
-        DATOS JSON A PROCESAR (TU ÚNICA REALIDAD):
         {contexto_ia}
         """
 
@@ -292,67 +268,13 @@ async def webhook_evolution(request: Request):
         )
     else:
         db = get_db()
-        resultados = []
-        tipo_busqueda = "nombre"
-        
-        # 2. Lógica de Negocio y Consultas
-        if query_usuario.startswith("genero "):
-            termino = query_usuario[7:].strip()
-            tipo_busqueda = "genero"
-            if termino:
-                try:
-                    response = db.table('producto').select('id, nombre, precio, estrellas, libro_detalles!inner(autor, editorial, genero, sinopsis)').ilike('libro_detalles.genero', f'%{termino}%').execute()
-                    resultados = response.data
-                    if not resultados:
-                        termino_norm = normalizar_texto(termino)
-                        response = db.table('producto').select('id, nombre, precio, estrellas, libro_detalles!inner(autor, editorial, genero, sinopsis)').ilike('libro_detalles.genero', f'%{termino_norm}%').execute()
-                        resultados = response.data
-                except Exception: pass
-        elif query_usuario.startswith("editorial "):
-            termino = query_usuario[10:].strip()
-            tipo_busqueda = "editorial"
-            if termino:
-                try:
-                    response = db.table('producto').select('id, nombre, precio, estrellas, libro_detalles!inner(autor, editorial, genero, sinopsis)').ilike('libro_detalles.editorial', f'%{termino}%').execute()
-                    resultados = response.data
-                    if not resultados:
-                        termino_norm = normalizar_texto(termino)
-                        response = db.table('producto').select('id, nombre, precio, estrellas, libro_detalles!inner(autor, editorial, genero, sinopsis)').ilike('libro_detalles.editorial', f'%{termino_norm}%').execute()
-                        resultados = response.data
-                except Exception: pass
-        elif query_usuario.startswith("estrellas "):
-            termino = query_usuario[10:].strip()
-            tipo_busqueda = "estrellas"
-            if termino:
-                try:
-                    response = db.table('producto').select('id, nombre, precio, estrellas, libro_detalles(autor, editorial, genero, sinopsis)').eq('estrellas', termino).execute()
-                    resultados = response.data
-                    if not resultados and termino == "5":
-                        response = db.table('producto').select('id, nombre, precio, estrellas, libro_detalles(autor, editorial, genero, sinopsis)').gte('estrellas', 4).order('estrellas', desc=True).limit(5).execute()
-                        resultados = response.data
-                except Exception: pass
-        else:
-            termino = query_usuario
-            tipo_busqueda = "nombre"
-            if termino:
-                try:
-                    # Búsqueda por nombre con JOIN
-                    response = db.table('producto').select('id, nombre, precio, estrellas, libro_detalles(autor, editorial, genero, sinopsis)').ilike('nombre', f'%{termino}%').execute()
-                    resultados = response.data
-                    if not resultados:
-                        termino_norm = normalizar_texto(termino)
-                        response = db.table('producto').select('id, nombre, precio, estrellas, libro_detalles(autor, editorial, genero, sinopsis)').ilike('nombre', f'%{termino_norm}%').execute()
-                        resultados = response.data
-                except Exception: pass
-
-        # 3. Formateo de la Respuesta con Google Gemini
-        datos_enviar = resultados
-        if not resultados:
-            try:
-                 resp_fallback = db.table('producto').select('id, nombre, precio, estrellas, libro_detalles(autor, editorial, genero, sinopsis)').limit(3).execute()
-                 datos_enviar = resp_fallback.data
-            except Exception:
-                 datos_enviar = []
+        # 2. Carga Completa del Catálogo en DB
+        try:
+            response = db.table('producto').select('id, nombre, precio, estrellas, libro_detalles(autor, editorial, genero, sinopsis)').execute()
+            datos_enviar = response.data if response.data else []
+        except Exception:
+            datos_enviar = []
+                 
                  
         mensaje_respuesta = generar_respuesta_cometa(query_usuario, datos_enviar, tipo_busqueda)
 
