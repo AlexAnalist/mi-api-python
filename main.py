@@ -145,7 +145,7 @@ def generar_respuesta_cometa(pregunta: str, datos_db: list) -> str:
         # 1. Carga Completa del Catálogo en Texto Plano (Anti-Crash ASGI)
         catalogo_text = ""
         for libro in datos_db:
-             id_prod = libro.get('id', 'N/A')
+             id_prod = libro.get('id_productos', 'N/A')
              nombre = libro.get('nombre', 'Desconocido')
              precio = libro.get('precio', 0.0)
              
@@ -288,9 +288,10 @@ async def webhook_evolution(request: Request):
         db = get_db()
         # 2. Carga Completa del Catálogo en DB
         try:
-            response = db.table('producto').select('id, nombre, precio, estrellas, libro_detalles(autor, editorial, genero, sinopsis)').execute()
+            response = db.table('producto').select('id_productos, nombre, precio, estrellas, libro_detalles(autor, editorial, genero, sinopsis)').execute()
             datos_enviar = response.data if response.data else []
-        except Exception:
+        except Exception as e:
+            print(f"Error en consulta Supabase: {e}")
             datos_enviar = []
                  
                  
