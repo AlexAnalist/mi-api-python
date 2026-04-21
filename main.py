@@ -142,17 +142,26 @@ def normalizar_texto(texto: str) -> str:
 def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) -> str:
     """Genera la respuesta dinámica usando el modelo Groq con filtrado previo."""
     try:
-        # 1. Carga Completa del Catálogo en Texto Optimizado
+        # 1. Carga Completa del Catálogo en Texto Plano (Anti-Crash ASGI)
         catalogo_text = ""
         for libro in datos_db:
              id_prod = libro.get('id', 'N/A')
              nombre = libro.get('nombre', 'Desconocido')
              precio = libro.get('precio', 0.0)
-             catalogo_text += f"[ID: {id_prod} | Nombre: {nombre} | Precio: {precio}], "
+             
+             # Extraer autor seguro previniendo errores de dict/list
+             detalles = libro.get('libro_detalles')
+             autor = 'Desconocido'
+             if isinstance(detalles, list) and len(detalles) > 0:
+                 autor = detalles[0].get('autor', 'Desconocido')
+             elif isinstance(detalles, dict):
+                 autor = detalles.get('autor', 'Desconocido')
+                 
+             catalogo_text += f"[ID: {id_prod} | Nombre: {nombre} | Autor: {autor} | Precio: {precio}], "
              
         if catalogo_text.endswith(", "): catalogo_text = catalogo_text[:-2]
         
-        contexto_ia = f"CATÁLOGO: {catalogo_text}"
+        contexto_ia = f"CATÁLOGO_SUPABASE: {catalogo_text}"
         
         # Log de Verificación en Railway
         print("--- LOG DE CARGA COMPLETA ---")
@@ -161,18 +170,18 @@ def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) 
         print("-----------------------------")
 
         prompt_sistema = f"""
-        INSTRUCCIÓN DE ANÁLISIS DE BASE DE DATOS:
-        Cometa, tu memoria de trabajo ahora contiene el inventario real de Mikrokosmos. Tu misión es ser un motor de búsqueda inteligente:
+        PROTOCOLO DE RESPUESTA BINARIA MIKROKOSMOS:
 
-        Paso 1: Escanea la lista CATÁLOGO buscando coincidencias con lo que pide el usuario.
-        Paso 2: Si el usuario escribe mal (ej: "cazadores de sombvra"), busca el nombre que más se le parezca en tu lista. ¡Tú tienes la inteligencia para saber que se refiere a "Cazadores de Sombras"!
-        Paso 3: Responde con el precio exacto y el nombre real que aparece en el catálogo.
+        ORIGEN DE DATOS: Tu única realidad es la lista CATÁLOGO_SUPABASE que acompaña cada mensaje. Si un dato no está ahí, no existe.
 
-        MANEJO DE ERRORES CRÍTICOS:
-        Si el libro definitivamente NO está (como "Harry Potata" o "Harry Potter"), responde: "¡Miau! Mis radares no detectan ese rastro...". Nunca inventes datos que no estén en la lista CATÁLOGO.
+        MISIÓN DE INTELIGENCIA: Tu trabajo es comparar lo que el usuario pide con la lista.
+        Usa tu IA para el Match: Si el usuario escribe con errores ("principit", "cazadore de sombra", "rivales"), busca en el catálogo el nombre que más se parezca. ¡Tú eres capaz de entender la intención!
+        Respuesta Positiva: Si hay un parecido razonable (>70%), responde con el Nombre Exacto, Autor y Precio que dicta la Supabase.
+        Respuesta Negativa: Si pides algo que NO se parece a nada (como Harry Potter), lanza el protocolo: "¡Miau! Mis radares no detectan ese rastro en nuestra base de datos actual 🐾".
 
-        PERSONALIDAD VS DATOS:
-        No pierdas tu personalidad de gata galáctica.
+        REGLA ANTI-CRASH: Responde de forma concisa. No inventes historias largas si el servidor está bajo presión.
+        VERIFICACIÓN FINAL: Antes de escupir un precio, mira la lista. Prohibido decir 15.0 si en la lista dice 10.0.
+        PERSONALIDAD: Eres Cometa, mantén los emojis galácticos, pero sé una bibliotecaria de datos precisa.
 
         {contexto_ia}
         """
