@@ -142,16 +142,17 @@ def normalizar_texto(texto: str) -> str:
 def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) -> str:
     """Genera la respuesta dinámica usando el modelo Groq con filtrado previo."""
     try:
-        # 1. Carga Completa del Catálogo en Texto
+        # 1. Carga Completa del Catálogo en Texto Optimizado
         catalogo_text = ""
         for libro in datos_db:
+             id_prod = libro.get('id', 'N/A')
              nombre = libro.get('nombre', 'Desconocido')
              precio = libro.get('precio', 0.0)
-             catalogo_text += f"[{nombre}: {precio}], "
+             catalogo_text += f"[ID: {id_prod} | Nombre: {nombre} | Precio: {precio}], "
              
         if catalogo_text.endswith(", "): catalogo_text = catalogo_text[:-2]
         
-        contexto_ia = f"CATÁLOGO_REAL: [{catalogo_text}]"
+        contexto_ia = f"CATÁLOGO: {catalogo_text}"
         
         # Log de Verificación en Railway
         print("--- LOG DE CARGA COMPLETA ---")
@@ -160,20 +161,18 @@ def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) 
         print("-----------------------------")
 
         prompt_sistema = f"""
-        INSTRUCCIÓN DE ANÁLISIS EXHAUSTIVO:
-        Cometa, tu memoria de corto plazo ahora contiene el CATÁLOGO_REAL. Antes de responder, lee CADA nombre de esa lista.
-        Si el usuario pregunta por algo, busca coincidencias aunque falten letras o tildes.
-        Si el usuario dice "Cazadores de sombras" y en el catálogo dice "Cazadores de Sombras", ¡SÍ EXISTE! Responde con su precio real del catálogo.
+        INSTRUCCIÓN DE ANÁLISIS DE BASE DE DATOS:
+        Cometa, tu memoria de trabajo ahora contiene el inventario real de Mikrokosmos. Tu misión es ser un motor de búsqueda inteligente:
 
-        PROHIBICIÓN DE INVENTIVA:
-        Si el nombre solicitado NO tiene ningún parecido con la lista de CATÁLOGO_REAL (como Harry Potter), di que no lo detectas. JAMÁS menciones un libro que no esté en esa lista específica que te acabo de pasar.
+        Paso 1: Escanea la lista CATÁLOGO buscando coincidencias con lo que pide el usuario.
+        Paso 2: Si el usuario escribe mal (ej: "cazadores de sombvra"), busca el nombre que más se le parezca en tu lista. ¡Tú tienes la inteligencia para saber que se refiere a "Cazadores de Sombras"!
+        Paso 3: Responde con el precio exacto y el nombre real que aparece en el catálogo.
 
-        FORMATO DE RESPUESTA:
-        - Si existe: Da el nombre exacto y el precio del catálogo. 
-        - Si no existe: Usa tu frase de "¡Miau! Mis radares no detectan ese rastro en nuestra base de datos actual 🐾" y ofrece 3 opciones aleatorias de la lista que SÍ existan.
+        MANEJO DE ERRORES CRÍTICOS:
+        Si el libro definitivamente NO está (como "Harry Potata" o "Harry Potter"), responde: "¡Miau! Mis radares no detectan ese rastro...". Nunca inventes datos que no estén en la lista CATÁLOGO.
 
         PERSONALIDAD VS DATOS:
-        No pierdas la personalidad de gata galáctica, pero asegúrate de que si el libro existe en el CATÁLOGO_REAL, lo encuentres a toda costa.
+        No pierdas tu personalidad de gata galáctica.
 
         {contexto_ia}
         """
@@ -198,7 +197,7 @@ def generar_respuesta_cometa(pregunta: str, datos_db: list, tipo_busqueda: str) 
         return response.json()['choices'][0]['message']['content'].strip()
     except Exception as e:
         print(f"Error en Groq: {e}")
-        return "¡Mis bigotes perciben estática! 🔌🌌 Error de conexión estelar. Inténtalo de nuevo."
+        return "¡Ups! Mi conexión estelar ha tenido un pequeño parpadeo. ¿Podrías repetirlo, viajero?"
 
 
 @app.post("/webhook")
