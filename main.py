@@ -149,15 +149,23 @@ def generar_respuesta_cometa(pregunta: str, datos_db: list) -> str:
              nombre = libro.get('nombre', 'Desconocido')
              precio = libro.get('precio', 0.0)
              
-             # Extraer autor seguro previniendo errores de dict/list
+             # Extraer metadatos seguros previniendo errores de dict/list
              detalles = libro.get('libro_detalles')
              autor = 'Desconocido'
+             editorial = 'Desconocida'
+             genero = 'Varios'
+             
              if isinstance(detalles, list) and len(detalles) > 0:
-                 autor = detalles[0].get('autor', 'Desconocido')
+                 meta = detalles[0]
+                 autor = meta.get('autor', 'Desconocido')
+                 editorial = meta.get('editorial', 'Desconocida')
+                 genero = meta.get('genero', 'Varios')
              elif isinstance(detalles, dict):
                  autor = detalles.get('autor', 'Desconocido')
+                 editorial = detalles.get('editorial', 'Desconocida')
+                 genero = detalles.get('genero', 'Varios')
                  
-             catalogo_text += f"[ID: {id_prod} | Nombre: {nombre} | Autor: {autor} | Precio: {precio}], "
+             catalogo_text += f"[ID: {id_prod} | Nombre: {nombre} | Autor: {autor} | Género: {genero} | Editorial: {editorial} | Precio: {precio}], "
              
         if catalogo_text.endswith(", "): catalogo_text = catalogo_text[:-2]
         
@@ -177,21 +185,22 @@ def generar_respuesta_cometa(pregunta: str, datos_db: list) -> str:
 
         2. PROTOCOLO DE BÚSQUEDA (Mapeo SQL):
         Búsqueda por Nombre: Mapea la consulta del usuario al campo nombre de la tabla producto.
-        Búsqueda por Atributos: Si el usuario pregunta por autor o editorial, busca en los datos anidados de libro_detalles.
+        Búsqueda por Atributos: Si el usuario pregunta por autor, editorial o género, busca exhaustivamente en los campos correspondientes de la lista CATÁLOGO_SUPABASE.
 
         3. REGLAS DE ORO CONTRA ALUCINACIONES:
         PROHIBICIÓN DE "HARRY POTTER": Si un libro no aparece en el CATÁLOGO_SUPABASE, NO EXISTE. Aunque sea el libro más famoso del mundo, si no está en tu lista, responde que tus radares no lo detectan.
         PRECISIÓN DE PRECIOS: El precio debe ser el valor exacto del campo precio en la tabla producto. Ejemplo: Si la DB dice 12.0, nunca digas 22.95.
-        AUTORÍA: Si el campo autor en libro_detalles es nulo o desconocido, di que es una "Obra de nuestra colección estelar" en lugar de inventar un autor de internet.
+        AUTORÍA: Si el campo autor es nulo o desconocido, di que es una "Obra de nuestra colección estelar" en lugar de inventar un autor de internet.
 
         4. LÓGICA DE FUZZY MATCH (3 PASADAS):
-        Exacta: ¿El nombre coincide? (Ej: "1984").
-        Ortográfica: ¿Hay errores leves? (Ej: "sien años de coledad" -> "Cien años de soledad").
-        Semántica: ¿Es una palabra clave? (Ej: "principit" -> "El Principito").
+        Exacta: ¿El nombre, autor o género coincide?
+        Ortográfica: ¿Hay errores leves? (Ej: "sien años de coledad" -> "Cien años de soledad" o "terror" -> búsqueda en campo género).
+        Semántica: ¿Es una palabra clave o autor reconocido? (Ej: "rebecca" -> busca en campo Autor por "Rebecca Yarros").
 
         5. FORMATO DE RESPUESTA OBLIGATORIO:
         Si el producto existe: "¡Miau! Mis bigotes vibran... ¡Lo encontré! 🐾 El libro es [nombre], escrito por [autor]. Su valor estelar es de [precio]$. 🌌"
-        Si el producto NO existe: "¡Miau! He explorado cada rincón de la galaxia Mikrokosmos y no detecto ese rastro en mis archivos actuales... 🌌 ¿Quizás buscas otro título o autor?"
+        Si el usuario busca por género o autor y hay varios: Lista hasta 3 opciones que coincidan claramente con el criterio solicitado.
+        Si el producto NO existe o no hay coincidencias: "¡Miau! He explorado cada rincón de la galaxia Mikrokosmos y no detecto ese rastro en mis archivos actuales... 🌌 ¿Quizás buscas otro título o autor?"
 
         CATÁLOGO DE VERDAD: {contexto_ia}
         """
